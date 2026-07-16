@@ -51,14 +51,41 @@ window.addEventListener('pipeline:init', async () => {
     // Bind the real-time processing stream pipeline
     // This hooks: Mic raw frame -> RNNoise Denoising -> WebRTC VAD -> OpenWakeWord inference
     eventBus.on(EVENTS.MIC_STREAM_DATA, (rawFrame) => {
+      const t0 = performance.now();
+      
       // 1. DSP (Denoise)
       const cleanFrame = rnnoise.process(rawFrame);
+      const t1 = performance.now();
       
       // 2. Voice Activity Detection
       vad.process(cleanFrame);
+      const t2 = performance.now();
       
       // 3. Wake Word Classifier Inference
       wakeword.process(cleanFrame);
+      const t3 = performance.now();
+
+      const dspMs = t1 - t0;
+      const vadMs = t2 - t1;
+      const wwMs = t3 - t2;
+      const totalMs = dspMs + vadMs + wwMs;
+
+      // Dispatch stage timings (estimated mic queue latency is 0.2ms)
+      eventBus.emit('pipeline:timing', {
+        mic: 0.2,
+        dsp: dspMs,
+        vad: vadMs,
+        ww: wwMs,
+        total: 0.2 + totalMs
+      });
+
+      // Calculate estimated CPU usage ratio based on the 32ms audio chunk budget
+      const cpuUsage = ((0.2 + totalMs) / 32) * 100;
+      eventBus.emit(EVENTS.METRICS_UPDATE, {
+        latencyMs: 0.2 + totalMs,
+        fps: 31,
+        cpuEstimation: Math.min(100, Math.max(0.1, cpuUsage))
+      });
     });
 
   } else {

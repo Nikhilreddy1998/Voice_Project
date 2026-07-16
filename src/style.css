@@ -489,3 +489,74 @@ body {
   border: 1px solid rgba(245, 158, 11, 0.4) !important;
   animation: alert-pulse 1.5s infinite;
 }
+
+/* Pipeline Stage Latency Panel */
+.pipeline-timing-panel {
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.timing-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 6px;
+}
+
+.timing-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.timing-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  padding: 8px 2px;
+  text-align: center;
+  transition: all var(--transition-fast);
+}
+
+.timing-item:hover {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(99, 102, 241, 0.1);
+}
+
+.timing-item.total {
+  background: rgba(99, 102, 241, 0.04);
+  border-color: rgba(99, 102, 241, 0.15);
+}
+
+.timing-lbl {
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.timing-val {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text-main);
+  font-family: var(--font-mono);
+  margin-top: 4px;
+}
+
+.timing-item.total .timing-val {
+  color: #a5b4fc;
+}

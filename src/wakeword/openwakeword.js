@@ -67,12 +67,7 @@ export class OpenWakeWordWrapper {
 
     const inferenceTime = performance.now() - startTime;
 
-    // Emit metrics update
-    eventBus.emit(EVENTS.METRICS_UPDATE, {
-      latencyMs: inferenceTime,
-      fps: 1000 / (inferenceTime || 1),
-      cpuEstimation: 5 // Simulated CPU percentage
-    });
+
 
     // Check if the detection threshold is crossed
     if (probability > this.threshold) {

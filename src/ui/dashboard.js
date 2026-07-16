@@ -99,6 +99,32 @@ export class Dashboard {
             <div class="visualizer-container">
               <canvas id="audio-visualizer" height="60"></canvas>
             </div>
+            <!-- Pipeline Timing Panel -->
+            <div class="pipeline-timing-panel">
+              <div class="timing-title">Pipeline Stage Latency</div>
+              <div class="timing-grid">
+                <div class="timing-item">
+                  <span class="timing-lbl">Microphone</span>
+                  <span class="timing-val" id="timing-mic">-- ms</span>
+                </div>
+                <div class="timing-item">
+                  <span class="timing-lbl">RNNoise (DSP)</span>
+                  <span class="timing-val" id="timing-dsp">-- ms</span>
+                </div>
+                <div class="timing-item">
+                  <span class="timing-lbl">VAD</span>
+                  <span class="timing-val" id="timing-vad">-- ms</span>
+                </div>
+                <div class="timing-item">
+                  <span class="timing-lbl">Wake Word</span>
+                  <span class="timing-val" id="timing-ww">-- ms</span>
+                </div>
+                <div class="timing-item total">
+                  <span class="timing-lbl">Total Latency</span>
+                  <span class="timing-val" id="timing-total">-- ms</span>
+                </div>
+              </div>
+            </div>
           </section>
 
           <!-- Console Event Log -->
@@ -133,7 +159,12 @@ export class Dashboard {
       metricFps: document.getElementById('metric-fps'),
       metricCpu: document.getElementById('metric-cpu'),
       logsList: document.getElementById('console-logs-list'),
-      canvas: document.getElementById('audio-visualizer')
+      canvas: document.getElementById('audio-visualizer'),
+      timingMic: document.getElementById('timing-mic'),
+      timingDsp: document.getElementById('timing-dsp'),
+      timingVad: document.getElementById('timing-vad'),
+      timingWw: document.getElementById('timing-ww'),
+      timingTotal: document.getElementById('timing-total')
     };
 
     // Instantiate and render VAD metrics sub-component
@@ -188,6 +219,16 @@ export class Dashboard {
     
     // Metrics subscription
     eventBus.on(EVENTS.METRICS_UPDATE, this._handleMetrics);
+    
+    eventBus.on('pipeline:timing', (timings) => {
+      if (this.elements.timingMic) {
+        this.elements.timingMic.textContent = `${timings.mic.toFixed(2)} ms`;
+        this.elements.timingDsp.textContent = `${timings.dsp.toFixed(2)} ms`;
+        this.elements.timingVad.textContent = `${timings.vad.toFixed(2)} ms`;
+        this.elements.timingWw.textContent = `${timings.ww.toFixed(2)} ms`;
+        this.elements.timingTotal.textContent = `${timings.total.toFixed(2)} ms`;
+      }
+    });
   }
 
   /**

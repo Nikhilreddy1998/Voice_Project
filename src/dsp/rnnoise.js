@@ -1,6 +1,7 @@
 import { eventBus } from '../events/event-bus.js';
 import { EVENTS } from '../utils/constants.js';
 import { logger } from '../utils/logger.js';
+import { Rnnoise } from '@shiguredo/rnnoise-wasm';
 
 /**
  * RNNoiseWrapper interfaces with the RNNoise WebAssembly module
@@ -8,11 +9,14 @@ import { logger } from '../utils/logger.js';
  */
 export class RNNoiseWrapper {
   constructor() {
-    this.wasmModule = null;
-    this.rnnoiseInstance = null;
+    this.rnnoise = null;
+    this.denoiseState = null;
     this.isInitialized = false;
-    this.inputBufferAddress = null;
-    this.outputBufferAddress = null;
+    this.frameCount = 0;
+
+    // Accumulation buffers for 48kHz audio processing
+    this.inputAccumulator = [];
+    this.outputAccumulator = [];
   }
 
   /**
@@ -22,17 +26,11 @@ export class RNNoiseWrapper {
   async initialize() {
     logger.info('RNNoise', 'Loading RNNoise WebAssembly library...');
     try {
-      // 1. Fetch and compile the RNNoise WASM binary
-      // TODO: Fetch compile/instantiate the WebAssembly binary from node_modules or assets
-      // this.wasmModule = await instantiateRnnoiseWasm();
+      // 1. Load the RNNoise WASM module
+      this.rnnoise = await Rnnoise.load();
 
-      // 2. Allocate WASM heap space for input/output audio buffers
-      // TODO: Allocate memory pointers for a 480 or 512 float buffer on WASM heap
-      // this.inputBufferAddress = this.wasmModule._malloc(512 * Float32Array.BYTES_PER_ELEMENT);
-      
-      // 3. Instantiate RNNoise state instance
-      // TODO: Initialize instance using WASM exports
-      // this.rnnoiseInstance = this.wasmModule._rnnoise_create(null);
+      // 2. Create the noise suppression state instance
+      this.denoiseState = this.rnnoise.createDenoiseState();
 
       this.isInitialized = true;
       eventBus.emit(EVENTS.DSP_INITIALIZED);
@@ -46,8 +44,8 @@ export class RNNoiseWrapper {
 
   /**
    * Process a single audio frame to suppress noise.
-   * Note: RNNoise operates internally on 480-sample frames (10ms at 48kHz) or custom frames.
-   * We will handle resampling/frame-bundling transformations here.
+   * Handles 16kHz to 48kHz upsampling, 480-sample frame processing via RNNoise,
+   * and 48kHz to 16kHz downsampling.
    * 
    * @param {Float32Array} inputFrame - Raw input frame from MicrophoneManager.
    * @returns {Float32Array} Denoised audio frame of the same size.
@@ -58,20 +56,74 @@ export class RNNoiseWrapper {
     }
 
     const startTime = performance.now();
-    
-    // Create output buffer placeholder
-    const denoisedFrame = new Float32Array(inputFrame.length);
 
-    // TODO: Copy inputFrame to WebAssembly memory heap
-    // TODO: Call WASM exports: _rnnoise_process_frame(this.rnnoiseInstance, this.outputBufferAddress, this.inputBufferAddress)
-    // TODO: Copy back denoised result from WASM heap to denoisedFrame
-    
-    // Simulate some work/noise suppression pass-through
-    for (let i = 0; i < inputFrame.length; i++) {
-      denoisedFrame[i] = inputFrame[i]; 
+    // 1. Upsample 16kHz input frame (512 samples) to 48kHz (1536 samples)
+    const upsampled = this._upsample16to48(inputFrame);
+
+    // 2. Add upsampled samples to input accumulator
+    for (let i = 0; i < upsampled.length; i++) {
+      this.inputAccumulator.push(upsampled[i]);
+    }
+
+    // 3. Process as many 480-sample frames as possible
+    const tempFrame = new Float32Array(480);
+    while (this.inputAccumulator.length >= 480) {
+      // Extract 480 samples
+      for (let i = 0; i < 480; i++) {
+        tempFrame[i] = this.inputAccumulator.shift();
+      }
+
+      // Convert from normalized float range [-1.0, 1.0] to 16-bit PCM float range [-32768.0, 32767.0]
+      for (let i = 0; i < 480; i++) {
+        tempFrame[i] = tempFrame[i] * 32768;
+      }
+
+      // Process the frame (modifies tempFrame in-place)
+      this.denoiseState.processFrame(tempFrame);
+
+      // Convert back to normalized float range [-1.0, 1.0]
+      for (let i = 0; i < 480; i++) {
+        tempFrame[i] = tempFrame[i] / 32768;
+      }
+
+      // Push processed samples to output accumulator
+      for (let i = 0; i < 480; i++) {
+        this.outputAccumulator.push(tempFrame[i]);
+      }
+    }
+
+    // 4. Extract 512 samples at 16kHz (requires 1536 samples at 48kHz)
+    const denoisedFrame = new Float32Array(inputFrame.length);
+    if (this.outputAccumulator.length >= 1536) {
+      // Retrieve 1536 samples at 48kHz
+      const segment48 = new Float32Array(1536);
+      for (let i = 0; i < 1536; i++) {
+        segment48[i] = this.outputAccumulator.shift();
+      }
+
+      // Downsample 48kHz segment (1536 samples) back to 16kHz (512 samples)
+      const downsampled = this._downsample48to16(segment48);
+      for (let i = 0; i < denoisedFrame.length; i++) {
+        denoisedFrame[i] = downsampled[i];
+      }
+    } else {
+      // In the first frame, we don't have enough samples yet due to latency.
+      // We pass through the raw input frame.
+      for (let i = 0; i < denoisedFrame.length; i++) {
+        denoisedFrame[i] = inputFrame[i];
+      }
     }
 
     const duration = performance.now() - startTime;
+    this.frameCount++;
+
+    // Periodically update the dashboard console log every 30 frames (~approx once per second)
+    if (this.frameCount % 30 === 0) {
+      logger.info(
+        'RNNoise',
+        `Denoising frames: count=${this.frameCount}, latency=${duration.toFixed(2)}ms`
+      );
+    }
 
     // Emit processed audio event
     eventBus.emit(EVENTS.DSP_PROCESSED, {
@@ -90,15 +142,42 @@ export class RNNoiseWrapper {
     if (!this.isInitialized) return;
     logger.info('RNNoise', 'Disposing RNNoise WebAssembly resources.');
 
-    // TODO: Free malloced buffers and destroy RNNoise state
-    // if (this.wasmModule) {
-    //   this.wasmModule._rnnoise_destroy(this.rnnoiseInstance);
-    //   this.wasmModule._free(this.inputBufferAddress);
-    //   this.wasmModule._free(this.outputBufferAddress);
-    // }
+    if (this.denoiseState) {
+      this.denoiseState.destroy();
+      this.denoiseState = null;
+    }
 
+    this.rnnoise = null;
     this.isInitialized = false;
-    this.wasmModule = null;
-    this.rnnoiseInstance = null;
+    this.inputAccumulator = [];
+    this.outputAccumulator = [];
+  }
+
+  /**
+   * Upsample 16kHz audio array to 48kHz by performing linear interpolation (ratio 3:1).
+   * @private
+   */
+  _upsample16to48(input) {
+    const output = new Float32Array(input.length * 3);
+    for (let i = 0; i < input.length; i++) {
+      const current = input[i];
+      const next = (i + 1 < input.length) ? input[i + 1] : current;
+      output[i * 3] = current;
+      output[i * 3 + 1] = current + (next - current) * (1 / 3);
+      output[i * 3 + 2] = current + (next - current) * (2 / 3);
+    }
+    return output;
+  }
+
+  /**
+   * Downsample 48kHz audio array to 16kHz by taking the average of every 3 samples (ratio 3:1).
+   * @private
+   */
+  _downsample48to16(input) {
+    const output = new Float32Array(input.length / 3);
+    for (let i = 0; i < output.length; i++) {
+      output[i] = (input[i * 3] + input[i * 3 + 1] + input[i * 3 + 2]) / 3;
+    }
+    return output;
   }
 }

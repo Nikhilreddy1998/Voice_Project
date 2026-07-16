@@ -1,5 +1,6 @@
 import { eventBus } from '../events/event-bus.js';
 import { EVENTS } from '../utils/constants.js';
+import { VadMetricsComponent } from './vad-metrics.js';
 
 export class Dashboard {
   /**
@@ -56,11 +57,14 @@ export class Dashboard {
                   <span id="status-dsp-badge" class="badge inactive">Inactive</span>
                 </div>
               </div>
-              <div class="status-item">
-                <span class="status-label">VAD (Voice Activity)</span>
-                <div class="status-indicator-wrapper">
-                  <span id="status-vad-badge" class="badge inactive">Idle</span>
+              <div class="status-item flex-col-layout">
+                <div class="status-row">
+                  <span class="status-label">VAD (Voice Activity)</span>
+                  <div class="status-indicator-wrapper">
+                    <span id="status-vad-badge" class="badge inactive">Idle</span>
+                  </div>
                 </div>
+                <div id="vad-metrics-container"></div>
               </div>
               <div class="status-item">
                 <span class="status-label">Wake Word Engine</span>
@@ -132,6 +136,13 @@ export class Dashboard {
       canvas: document.getElementById('audio-visualizer')
     };
 
+    // Instantiate and render VAD metrics sub-component
+    const vadMetricsContainer = document.getElementById('vad-metrics-container');
+    if (vadMetricsContainer) {
+      this.vadMetrics = new VadMetricsComponent(vadMetricsContainer);
+      this.vadMetrics.render();
+    }
+
     this._bindButtonEvents();
     this._subscribeToEvents();
     this._initializeCanvas();
@@ -152,8 +163,25 @@ export class Dashboard {
     eventBus.on(EVENTS.DSP_INITIALIZED, () => this._handleDspStatus('Active'));
     
     eventBus.on(EVENTS.VAD_INITIALIZED, () => this._handleVadStatus('Active'));
-    eventBus.on(EVENTS.SPEECH_START, () => this._handleVadStatus('Listening'));
-    eventBus.on(EVENTS.SPEECH_END, () => this._handleVadStatus('Idle'));
+    eventBus.on(EVENTS.VAD_READY, () => this._handleVadStatus('Ready'));
+    eventBus.on(EVENTS.VAD_ERROR, () => this._handleVadStatus('Error'));
+    eventBus.on(EVENTS.SPEECH_START, () => this._handleVadStatus('Speech Detected'));
+    eventBus.on(EVENTS.SPEECH_END, () => this._handleVadStatus('Listening'));
+    
+    // Window listeners for pipeline active/inactive transitions
+    window.addEventListener('pipeline:start', () => {
+      // Transition from Ready to Listening when mic starts streaming
+      const currentText = this.elements.vadBadge.textContent;
+      if (currentText !== 'Error') {
+        this._handleVadStatus('Listening');
+      }
+    });
+    window.addEventListener('pipeline:stop', () => {
+      const currentText = this.elements.vadBadge.textContent;
+      if (currentText !== 'Error') {
+        this._handleVadStatus('Idle');
+      }
+    });
     
     eventBus.on(EVENTS.WAKEWORD_INITIALIZED, () => this._handleWakewordStatus('Active'));
     eventBus.on(EVENTS.WAKEWORD_DETECTED, this._handleWakewordDetected);
@@ -258,8 +286,12 @@ export class Dashboard {
     
     if (state === 'Listening') {
       badge.classList.add('primary-glow');
-    } else if (state === 'Active') {
+    } else if (state === 'Speech Detected') {
+      badge.classList.add('alert-glow');
+    } else if (state === 'Active' || state === 'Ready') {
       badge.classList.add('success');
+    } else if (state === 'Error') {
+      badge.classList.add('danger');
     } else {
       badge.classList.add('inactive');
     }

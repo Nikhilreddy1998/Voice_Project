@@ -23,6 +23,9 @@ export const EVENTS = {
   SPEECH_START: 'speech:start',
   SPEECH_END: 'speech:end',
   VAD_STATE_CHANGE: 'vad:state-change', // Emits { active: boolean }
+  VAD_READY: 'vad:ready',
+  VAD_ERROR: 'vad:error',
+  VAD_METRICS: 'vad:metrics',
 
   // Wake Word Events
   WAKEWORD_INITIALIZED: 'wakeword:initialized',

@@ -10,6 +10,7 @@
     "lint": "eslint src"
   },
   "dependencies": {
+    "@ennuicastr/webrtcvad.js": "^0.1.1",
     "@shiguredo/rnnoise-wasm": "^2025.1.5",
     "onnxruntime-web": "^1.20.1"
   },

@@ -92,12 +92,28 @@ export class MicrophoneManager {
 
   /**
    * Callback fired by the Audio Worklet on the audio thread.
-   * @param {Float32Array} frame - Raw audio buffer (512 samples at 16kHz)
+   * @param {Object} data - Message data from the worklet containing audioFrame and metadata.
+   * @param {Float32Array} data.audioFrame - Raw audio buffer (512 samples at 16kHz)
+   * @param {number} data.frameCount - Total count of processed frames
+   * @param {number} data.timestamp - Timestamp from the audio thread
+   * @param {number} data.bufferSize - Buffer size (512)
    */
-  handleAudioFrame(frame) {
+  handleAudioFrame(data) {
     if (!this.isRecording) return;
 
-    eventBus.emit(EVENTS.MIC_STREAM_DATA, frame);
+    const { audioFrame, frameCount, timestamp, bufferSize } = data;
+
+    // Periodically update the dashboard console log every 30 frames (~approx once per second)
+    // to verify that frames are actively being received and processed, without flooding the DOM.
+    if (frameCount % 30 === 0) {
+      logger.info(
+        'Microphone',
+        `Frame received: count=${frameCount}, timestamp=${timestamp.toFixed(2)}s, size=${bufferSize}`
+      );
+    }
+
+    // Emit raw audio data down the pipeline
+    eventBus.emit(EVENTS.MIC_STREAM_DATA, audioFrame);
   }
 
   /**

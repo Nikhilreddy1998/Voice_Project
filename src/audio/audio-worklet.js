@@ -6,17 +6,17 @@
 class AudioProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    // TODO: Initialize internal buffer or ring buffer to accumulate samples
     this.bufferSize = 512;
     this.buffer = new Float32Array(this.bufferSize);
     this.writeIndex = 0;
+    this.frameCount = 0;
   }
 
   /**
    * Main audio processing loop callback.
    * @param {Array<Array<Float32Array>>} inputs - Array of inputs, each input is an array of channels, each channel is a Float32Array of 128 samples.
-   * @param {Array<Array<Float32Array>>} outputs - Output channels (if forwarding is needed).
-   * @param {Object} parameters - Dynamic parameters.
+   * @param {Array<Array<Float32Array>>} _outputs - Output channels (if forwarding is needed).
+   * @param {Object} _parameters - Dynamic parameters.
    * @returns {boolean} Keep worklet alive.
    */
   process(inputs, _outputs, _parameters) {
@@ -27,15 +27,22 @@ class AudioProcessor extends AudioWorkletProcessor {
     const channelData = input[0];
     const length = channelData.length; // Typically 128 samples
 
-    // TODO: Write incoming samples to the circular accumulator buffer
-    // For now, this is a simplified simulation of block bundling:
+    // Write incoming samples to the circular accumulator buffer
     for (let i = 0; i < length; i++) {
       this.buffer[this.writeIndex++] = channelData[i];
 
-      // If buffer is full, post it to the main thread and reset
+      // If buffer is full, post it to the main thread along with metadata, and reset
       if (this.writeIndex >= this.bufferSize) {
-        // Post a copy of the accumulated buffer
-        this.port.postMessage(this.buffer.slice());
+        this.frameCount++;
+        
+        // Post a copy of the accumulated buffer along with metadata (frameCount, timestamp, bufferSize)
+        this.port.postMessage({
+          audioFrame: this.buffer.slice(),
+          frameCount: this.frameCount,
+          timestamp: globalThis.currentTime,
+          bufferSize: this.bufferSize
+        });
+        
         this.writeIndex = 0;
       }
     }
@@ -45,3 +52,4 @@ class AudioProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('audio-processor', AudioProcessor);
+

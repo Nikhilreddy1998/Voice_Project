@@ -30,6 +30,10 @@ export const EVENTS = {
   // Wake Word Events
   WAKEWORD_INITIALIZED: 'wakeword:initialized',
   WAKEWORD_DETECTED: 'wakeword:detected', // Emits { word: string, probability: number }
+  WAKEWORD_READY: 'wakeword:ready',
+  WAKEWORD_ERROR: 'wakeword:error',
+  WAKEWORD_METRICS: 'wakeword:metrics',
+  WAKEWORD_PROGRESS: 'wakeword:progress',
 
   // Performance/Telemetry Events
   METRICS_UPDATE: 'metrics:update', // Emits { latencyMs: number, fps: number, cpuEstimation: number }

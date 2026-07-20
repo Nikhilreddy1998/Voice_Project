@@ -1,101 +1,128 @@
 import { eventBus } from '../events/event-bus.js';
 import { EVENTS } from '../utils/constants.js';
 import { logger } from '../utils/logger.js';
+import { ModelLoader } from './model-loader.js';
+import { WakeWordInference } from './inference.js';
 
 /**
- * OpenWakeWordWrapper handles downloading/caching the wake word model,
- * initializing the ONNX Runtime Web InferenceSession, running inference
- * on audio frames, and emitting a detection event when the probability threshold is crossed.
+ * OpenWakeWordWrapper coordinates model downloading, ONNX session initialization,
+ * event hooks, and conditional execution gating.
  */
 export class OpenWakeWordWrapper {
   constructor() {
-    this.session = null;
+    this.config = {
+      wakeWord: 'Hey Louie',
+      model: 'hey_mycroft',
+      mode: 'Development',
+      threshold: 0.50,
+      cooldown: 2000,
+      sampleRate: 16000
+    };
+
+    this.loader = new ModelLoader();
+    this.inference = new WakeWordInference();
+    
     this.isInitialized = false;
-    this.threshold = 0.5; // Probability threshold for wake word
-    this.modelPath = '/models/wakeword.onnx'; // Local path to ONNX model file
+    this.isSpeechActive = false;
+    this.hasNotifiedPending = false;
+
+    // Bind listeners
+    this._handleSpeechStart = this._handleSpeechStart.bind(this);
+    this._handleSpeechEnd = this._handleSpeechEnd.bind(this);
+
+    eventBus.on(EVENTS.SPEECH_START, this._handleSpeechStart);
+    eventBus.on(EVENTS.SPEECH_END, this._handleSpeechEnd);
+  }
+
+  _handleSpeechStart() {
+    this.isSpeechActive = true;
+    this.hasNotifiedPending = false;
+  }
+
+  _handleSpeechEnd() {
+    this.isSpeechActive = false;
   }
 
   /**
-   * Initialize ONNX Runtime Web and load the OpenWakeWord model.
+   * Download the ONNX model, boot the ONNX session, and check metadata properties.
+   * 
    * @param {Object} options - Configuration overrides.
-   * @param {string} [options.modelPath] - Custom model location.
-   * @param {number} [options.threshold] - Custom probability threshold.
    * @returns {Promise<boolean>}
    */
   async initialize(options = {}) {
-    if (options.modelPath) this.modelPath = options.modelPath;
-    if (options.threshold) this.threshold = options.threshold;
+    this.config = { ...this.config, ...options };
+    logger.info('WakeWord', `Initializing OpenWakeWord Engine for target wake word "${this.config.wakeWord}"...`);
 
-    logger.info('WakeWord', `Initializing OpenWakeWord model from path: ${this.modelPath}...`);
+    // Declare URLs outside try so catch block can evict them from cache
+    const localUrl = `/models/${this.config.model}.onnx`;
+    const fallbackUrl = `https://raw.githubusercontent.com/CLFML/lowwi/main/models/example_wakewords/${this.config.model}.onnx`;
+
     try {
-      // 1. Initialize ONNX Runtime Web
-      // TODO: Import onnxruntime-web dynamically or use imported package
-      // const ort = await import('onnxruntime-web');
+      // 1. Download/Cache model file with automatic local-to-remote fallback
+      let modelBuffer;
+      try {
+        modelBuffer = await this.loader.loadModel(this.config.model, localUrl);
+      } catch (localError) {
+        logger.warn('WakeWord', `Local model file not found or failed to load. Falling back to remote LFS URL: ${fallbackUrl}`);
+        modelBuffer = await this.loader.loadModel(this.config.model, fallbackUrl);
+      }
 
-      // 2. Load model from path/URL and instantiate inference session
-      // TODO: ort.InferenceSession.create(this.modelPath, { executionProviders: ['wasm'] });
-      
+      // 2. Load and validate inside ONNX session
+      await this.inference.initialize(modelBuffer, this.config.model);
+
       this.isInitialized = true;
       eventBus.emit(EVENTS.WAKEWORD_INITIALIZED);
-      logger.info('WakeWord', 'OpenWakeWord ONNX Inference session loaded successfully.');
+      eventBus.emit(EVENTS.WAKEWORD_READY);
       return true;
     } catch (error) {
-      logger.error('WakeWord', `Failed to load OpenWakeWord model: ${error.message}`);
+      logger.error('WakeWord', `Initialization failed: ${error.message}. Evicting cache to recover...`);
+      
+      // Self-healing cache eviction — clears corrupt entries so next attempt re-downloads
+      try {
+        const cache = await caches.open('openwakeword-models');
+        await cache.delete(localUrl);
+        await cache.delete(fallbackUrl);
+        logger.info('WakeWord', 'Evicted corrupted model cache entries. Please retry initialization.');
+      } catch (cacheError) {
+        logger.warn('WakeWord', `Failed to evict cache: ${cacheError.message}`);
+      }
+
+      eventBus.emit(EVENTS.WAKEWORD_ERROR);
       return false;
     }
   }
 
   /**
-   * Run inference on the incoming audio frame (or accumulated feature buffers).
-   * Note: OpenWakeWord typically operates on Mel-spectrogram inputs generated from 
-   * overlapping audio frames (e.g. 1280 samples or sliding windows).
+   * Process a single audio frame. Gated by VAD speech classification.
    * 
-   * @param {Float32Array} frame - Denoised audio frame.
+   * @param {Float32Array} frame - Raw/denoised PCM float32 audio frame.
    */
-  process(_frame) {
+  process(frame) {
     if (!this.isInitialized) return;
 
-    const startTime = performance.now();
-    let probability = 0.0;
-
-    // TODO: Extract audio features (spectrogram) and populate ONNX input tensor
-    // const inputTensor = new ort.Tensor('float32', featureData, [1, 96, 64]);
-    
-    // TODO: Run inference: const outputs = await this.session.run({ input: inputTensor });
-    // TODO: Extract prediction score output
-    // probability = outputs.sigmoid_predictions.data[0];
-
-    const inferenceTime = performance.now() - startTime;
-
-
-
-    // Check if the detection threshold is crossed
-    if (probability > this.threshold) {
-      logger.info('WakeWord', `WAKE WORD DETECTED! Probability: ${probability.toFixed(4)}`);
-      eventBus.emit(EVENTS.WAKEWORD_DETECTED, {
-        word: 'alexa', // Placeholder for detected target word
-        probability
-      });
+    if (this.isSpeechActive) {
+      if (!this.hasNotifiedPending) {
+        // Output the honest, transparent status log in the console
+        logger.info('WakeWord', 'VAD Speech active. Engine is ready and waiting for feature extraction backbone (Phase 2).');
+        this.hasNotifiedPending = true;
+      }
     }
   }
 
   /**
-   * Release ONNX session resources.
+   * Unsubscribe from events and dispose ONNX sessions.
    */
-  async dispose() {
-    if (!this.isInitialized) return;
-    logger.info('WakeWord', 'Disposing OpenWakeWord inference session.');
+  dispose() {
+    eventBus.off(EVENTS.SPEECH_START, this._handleSpeechStart);
+    eventBus.off(EVENTS.SPEECH_END, this._handleSpeechEnd);
 
-    try {
-      // TODO: Release ONNX session
-      // if (this.session) {
-      //   await this.session.release();
-      // }
-    } catch (e) {
-      logger.error('WakeWord', `Error during ONNX disposal: ${e.message}`);
+    if (this.isInitialized) {
+      this.inference.dispose();
     }
-
-    this.session = null;
+    
     this.isInitialized = false;
+    this.isSpeechActive = false;
+    this.hasNotifiedPending = false;
+    logger.info('WakeWord', 'OpenWakeWord Engine resources disposed.');
   }
 }

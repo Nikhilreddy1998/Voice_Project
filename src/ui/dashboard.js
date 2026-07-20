@@ -75,6 +75,67 @@ export class Dashboard {
             </div>
           </section>
 
+          <!-- Wake Word Engine Card -->
+          <section class="card wakeword-card">
+            <h2>Wake Word Engine</h2>
+            <div class="status-grid">
+              <div class="status-item flex-col-layout">
+                <div class="status-row">
+                  <span class="status-label">Engine Status</span>
+                  <div class="status-indicator-wrapper">
+                    <span id="ww-status-badge" class="badge inactive">Uninitialized</span>
+                  </div>
+                </div>
+                
+                <div class="status-row" style="margin-top: 8px;">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Configured Phrase</span>
+                  <span class="text-mono text-sm" id="ww-cfg-phrase" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">Hey Louie</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Loaded Model</span>
+                  <span class="text-mono text-sm" id="ww-loaded-model" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">--</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Mode</span>
+                  <span class="badge text-xs" id="ww-mode-badge" style="font-size: 0.75rem; background: rgba(139, 92, 246, 0.15); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.3);">Development</span>
+                </div>
+                
+                <div id="ww-progress-bar-container" style="display: none; width: 100%; margin-top: 8px;">
+                  <div class="progress-bar-lbl" style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-text-muted); margin-bottom: 4px;">
+                    <span>Downloading Model...</span>
+                    <span id="ww-progress-pct">0%</span>
+                  </div>
+                  <div class="progress-bar-bg" style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+                    <div id="ww-progress-fill" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.1s;"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="status-item flex-col-layout">
+                <div class="status-row">
+                  <span class="status-label">Inference Status</span>
+                  <span class="badge warning" id="ww-inference-status">Disabled</span>
+                </div>
+                <div class="status-row" style="margin-top: 8px;">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Reason</span>
+                  <span class="text-mono text-sm" id="ww-inference-reason" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--warning);">Feature Extractor Pending</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Last Detection</span>
+                  <span class="text-mono text-sm" id="ww-metric-last-detect" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">--</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Detections</span>
+                  <span class="text-mono text-sm" id="ww-metric-detections" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">0</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Cooldown</span>
+                  <span class="badge inactive" id="ww-cooldown-badge">Inactive</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <!-- Telemetry Grid -->
           <section class="card telemetry-card">
             <h2>Real-time Performance</h2>
@@ -164,7 +225,19 @@ export class Dashboard {
       timingDsp: document.getElementById('timing-dsp'),
       timingVad: document.getElementById('timing-vad'),
       timingWw: document.getElementById('timing-ww'),
-      timingTotal: document.getElementById('timing-total')
+      timingTotal: document.getElementById('timing-total'),
+      wwStatusBadge: document.getElementById('ww-status-badge'),
+      wwCfgPhrase: document.getElementById('ww-cfg-phrase'),
+      wwLoadedModel: document.getElementById('ww-loaded-model'),
+      wwModeBadge: document.getElementById('ww-mode-badge'),
+      wwProgressBarContainer: document.getElementById('ww-progress-bar-container'),
+      wwProgressPct: document.getElementById('ww-progress-pct'),
+      wwProgressFill: document.getElementById('ww-progress-fill'),
+      wwInferenceStatus: document.getElementById('ww-inference-status'),
+      wwInferenceReason: document.getElementById('ww-inference-reason'),
+      wwMetricLastDetect: document.getElementById('ww-metric-last-detect'),
+      wwMetricDetections: document.getElementById('ww-metric-detections'),
+      wwCooldownBadge: document.getElementById('ww-cooldown-badge')
     };
 
     // Instantiate and render VAD metrics sub-component
@@ -227,6 +300,46 @@ export class Dashboard {
         this.elements.timingVad.textContent = `${timings.vad.toFixed(2)} ms`;
         this.elements.timingWw.textContent = `${timings.ww.toFixed(2)} ms`;
         this.elements.timingTotal.textContent = `${timings.total.toFixed(2)} ms`;
+      }
+    });
+
+    eventBus.on(EVENTS.WAKEWORD_PROGRESS, (progress) => {
+      if (this.elements.wwProgressBarContainer) {
+        this.elements.wwProgressBarContainer.style.display = 'block';
+        this.elements.wwProgressPct.textContent = `${progress}%`;
+        this.elements.wwProgressFill.style.width = `${progress}%`;
+        this.elements.wwStatusBadge.textContent = `Downloading (${progress}%)`;
+        this.elements.wwStatusBadge.className = 'badge warning';
+        
+        if (progress >= 100) {
+          setTimeout(() => {
+            if (this.elements.wwProgressBarContainer) {
+              this.elements.wwProgressBarContainer.style.display = 'none';
+            }
+          }, 1000);
+        }
+      }
+    });
+
+    eventBus.on(EVENTS.WAKEWORD_READY, () => {
+      this._handleWakewordStatus('Ready');
+      if (this.elements.wwStatusBadge) {
+        this.elements.wwStatusBadge.textContent = 'Ready (model loaded)';
+        this.elements.wwStatusBadge.className = 'badge success';
+      }
+      if (this.elements.wwLoadedModel) {
+        this.elements.wwLoadedModel.textContent = 'Hey Mycroft';
+      }
+    });
+
+    eventBus.on(EVENTS.WAKEWORD_ERROR, () => {
+      this._handleWakewordStatus('Error');
+      if (this.elements.wwStatusBadge) {
+        this.elements.wwStatusBadge.textContent = 'Error';
+        this.elements.wwStatusBadge.className = 'badge danger';
+      }
+      if (this.elements.wwProgressBarContainer) {
+        this.elements.wwProgressBarContainer.style.display = 'none';
       }
     });
   }
@@ -344,7 +457,13 @@ export class Dashboard {
   _handleWakewordStatus(state) {
     const badge = this.elements.wwBadge;
     badge.textContent = state;
-    badge.className = 'badge ' + (state === 'Active' ? 'success' : 'inactive');
+    if (state === 'Ready' || state === 'Active') {
+      badge.className = 'badge success';
+    } else if (state === 'Error') {
+      badge.className = 'badge danger';
+    } else {
+      badge.className = 'badge inactive';
+    }
   }
 
   /**

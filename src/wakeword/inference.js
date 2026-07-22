@@ -65,8 +65,12 @@ export class WakeWordInference {
       // Note: input/output definitions in ort are accessed via session.handler (or session.inputNames mapped to session.inputs)
       // In newer ort versions, input/output dimensions are stored on session.inputNames/outputNames or inferred.
       // We can check shapes from session.inputNames and inputs:
-      const inputMetadata = this.session.inputs ? this.session.inputs[0] : null;
-      const outputMetadata = this.session.outputs ? this.session.outputs[0] : null;
+      const inputMetadata = this.session.inputs
+        ? (Array.isArray(this.session.inputs) ? this.session.inputs[0] : this.session.inputs[inputName])
+        : null;
+      const outputMetadata = this.session.outputs
+        ? (Array.isArray(this.session.outputs) ? this.session.outputs[0] : this.session.outputs[outputName])
+        : null;
 
       const inputShape = inputMetadata ? inputMetadata.dims : [1, 16, 96]; // fallback if not exposed
       const inputType = inputMetadata ? inputMetadata.type : 'float32';

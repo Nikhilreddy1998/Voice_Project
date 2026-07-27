@@ -16,11 +16,12 @@ export class ModelLoader {
    * 
    * @param {string} modelName - Configuration identifier (e.g. "hey_mycroft")
    * @param {string} modelUrl - Network URL or local path to download
+   * @param {string} [progressEvent] - Event to emit progress updates on (defaults to EVENTS.WAKEWORD_PROGRESS)
    * @returns {Promise<ArrayBuffer>}
    */
-  async loadModel(modelName, modelUrl) {
+  async loadModel(modelName, modelUrl, progressEvent = EVENTS.WAKEWORD_PROGRESS) {
     logger.info('WakeWord', `Preparing to load model "${modelName}"...`);
-    eventBus.emit(EVENTS.WAKEWORD_PROGRESS, 0);
+    eventBus.emit(progressEvent, 0);
 
     try {
       // 1. Open browser CacheStorage
@@ -43,7 +44,7 @@ export class ModelLoader {
             await cache.delete(modelUrl);
           } else {
             logger.info('WakeWord', `Model "${modelName}" found in browser CacheStorage. Loading offline...`);
-            eventBus.emit(EVENTS.WAKEWORD_PROGRESS, 100);
+            eventBus.emit(progressEvent, 100);
             return buffer;
           }
         }
@@ -83,7 +84,7 @@ export class ModelLoader {
 
         if (totalBytes > 0) {
           const progress = Math.round((loadedBytes / totalBytes) * 100);
-          eventBus.emit(EVENTS.WAKEWORD_PROGRESS, progress);
+          eventBus.emit(progressEvent, progress);
         }
       }
 
@@ -115,7 +116,7 @@ export class ModelLoader {
         logger.warn('WakeWord', `Failed to write model cache: ${cacheError.message}`);
       }
 
-      eventBus.emit(EVENTS.WAKEWORD_PROGRESS, 100);
+      eventBus.emit(progressEvent, 100);
       return mergedBuffer.buffer;
     } catch (error) {
       logger.error('WakeWord', `Failed to load model file: ${error.message}`);

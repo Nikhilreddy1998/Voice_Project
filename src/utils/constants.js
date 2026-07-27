@@ -35,6 +35,13 @@ export const EVENTS = {
   WAKEWORD_METRICS: 'wakeword:metrics',
   WAKEWORD_PROGRESS: 'wakeword:progress',
 
+  // Mel Spectrogram Events
+  MELSPEC_READY: 'melspec:ready',
+  MELSPEC_ERROR: 'melspec:error',
+  MELSPEC_FEATURES: 'melspec:features',
+  MELSPEC_METRICS: 'melspec:metrics',
+  MELSPEC_PROGRESS: 'melspec:progress',
+
   // Performance/Telemetry Events
   METRICS_UPDATE: 'metrics:update', // Emits { latencyMs: number, fps: number, cpuEstimation: number }
   LOG: 'log', // Emits { timestamp: string, level: string, message: string }

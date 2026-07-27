@@ -29,9 +29,11 @@ export class OpenWakeWordWrapper {
     // Bind listeners
     this._handleSpeechStart = this._handleSpeechStart.bind(this);
     this._handleSpeechEnd = this._handleSpeechEnd.bind(this);
+    this._handleMelFeatures = this._handleMelFeatures.bind(this);
 
     eventBus.on(EVENTS.SPEECH_START, this._handleSpeechStart);
     eventBus.on(EVENTS.SPEECH_END, this._handleSpeechEnd);
+    eventBus.on(EVENTS.MELSPEC_FEATURES, this._handleMelFeatures);
   }
 
   _handleSpeechStart() {
@@ -41,6 +43,22 @@ export class OpenWakeWordWrapper {
 
   _handleSpeechEnd() {
     this.isSpeechActive = false;
+  }
+
+  /**
+   * Listen to the Mel Spectrogram feature frames.
+   * 
+   * @param {Object} payload
+   * @param {Float32Array} payload.features
+   * @param {Array<number>} payload.shape
+   */
+  _handleMelFeatures({ features, shape }) {
+    if (!this.isInitialized) return;
+    
+    // Log a sample of received features in development mode to verify the pipe is working
+    if (this.config.mode === 'Development' && Math.random() < 0.02) {
+      logger.info('WakeWord', `Ingested Mel Spectrogram features frame: size=${features.length}, shape=[${shape.join(', ')}]`);
+    }
   }
 
   /**
@@ -115,6 +133,7 @@ export class OpenWakeWordWrapper {
   dispose() {
     eventBus.off(EVENTS.SPEECH_START, this._handleSpeechStart);
     eventBus.off(EVENTS.SPEECH_END, this._handleSpeechEnd);
+    eventBus.off(EVENTS.MELSPEC_FEATURES, this._handleMelFeatures);
 
     if (this.isInitialized) {
       this.inference.dispose();

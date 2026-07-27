@@ -67,6 +67,12 @@ export class Dashboard {
                 <div id="vad-metrics-container"></div>
               </div>
               <div class="status-item">
+                <span class="status-label">Mel Spectrogram</span>
+                <div class="status-indicator-wrapper">
+                  <span id="status-melspec-badge" class="badge inactive">Inactive</span>
+                </div>
+              </div>
+              <div class="status-item">
                 <span class="status-label">Wake Word Engine</span>
                 <div class="status-indicator-wrapper">
                   <span id="status-ww-badge" class="badge inactive">Waiting...</span>
@@ -136,6 +142,66 @@ export class Dashboard {
             </div>
           </section>
 
+          <!-- Mel Spectrogram Card -->
+          <section class="card melspec-card">
+            <h2>Mel Spectrogram</h2>
+            <div class="status-grid">
+              <div class="status-item flex-col-layout">
+                <div class="status-row">
+                  <span class="status-label">Status</span>
+                  <div class="status-indicator-wrapper">
+                    <span id="melspec-status-badge" class="badge inactive">Uninitialized</span>
+                  </div>
+                </div>
+                <div class="status-row" style="margin-top: 8px;">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Model</span>
+                  <span class="text-mono text-sm" id="melspec-loaded-model" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">--</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Sample Rate</span>
+                  <span class="text-mono text-sm" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">16000 Hz</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Buffer Size</span>
+                  <span class="text-mono text-sm" id="melspec-buffer-size" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">0 samples</span>
+                </div>
+                
+                <div id="melspec-progress-bar-container" style="display: none; width: 100%; margin-top: 8px;">
+                  <div class="progress-bar-lbl" style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-text-muted); margin-bottom: 4px;">
+                    <span>Downloading Model...</span>
+                    <span id="melspec-progress-pct">0%</span>
+                  </div>
+                  <div class="progress-bar-bg" style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+                    <div id="melspec-progress-fill" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.1s;"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="status-item flex-col-layout">
+                <div class="status-row">
+                  <span class="status-label">Frames Generated</span>
+                  <span class="text-mono" id="melspec-metric-frames" style="font-weight: 600; color: var(--primary);">0</span>
+                </div>
+                <div class="status-row" style="margin-top: 8px;">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Average Latency</span>
+                  <span class="text-mono text-sm" id="melspec-metric-avg-latency" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">-- ms</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Max Latency</span>
+                  <span class="text-mono text-sm" id="melspec-metric-max-latency" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">-- ms</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Dropped Frames</span>
+                  <span class="text-mono text-sm" id="melspec-metric-dropped" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">0</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Last Feature Time</span>
+                  <span class="text-mono text-sm" id="melspec-metric-last-time" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">--</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <!-- Telemetry Grid -->
           <section class="card telemetry-card">
             <h2>Real-time Performance</h2>
@@ -177,6 +243,10 @@ export class Dashboard {
                   <span class="timing-val" id="timing-vad">-- ms</span>
                 </div>
                 <div class="timing-item">
+                  <span class="timing-lbl">Mel Spectrogram</span>
+                  <span class="timing-val" id="timing-melspec">-- ms</span>
+                </div>
+                <div class="timing-item">
                   <span class="timing-lbl">Wake Word</span>
                   <span class="timing-val" id="timing-ww">-- ms</span>
                 </div>
@@ -215,6 +285,7 @@ export class Dashboard {
       micBadge: document.getElementById('status-mic-badge'),
       dspBadge: document.getElementById('status-dsp-badge'),
       vadBadge: document.getElementById('status-vad-badge'),
+      melspecBadge: document.getElementById('status-melspec-badge'),
       wwBadge: document.getElementById('status-ww-badge'),
       metricLatency: document.getElementById('metric-latency'),
       metricFps: document.getElementById('metric-fps'),
@@ -224,6 +295,7 @@ export class Dashboard {
       timingMic: document.getElementById('timing-mic'),
       timingDsp: document.getElementById('timing-dsp'),
       timingVad: document.getElementById('timing-vad'),
+      timingMelspec: document.getElementById('timing-melspec'),
       timingWw: document.getElementById('timing-ww'),
       timingTotal: document.getElementById('timing-total'),
       wwStatusBadge: document.getElementById('ww-status-badge'),
@@ -237,7 +309,20 @@ export class Dashboard {
       wwInferenceReason: document.getElementById('ww-inference-reason'),
       wwMetricLastDetect: document.getElementById('ww-metric-last-detect'),
       wwMetricDetections: document.getElementById('ww-metric-detections'),
-      wwCooldownBadge: document.getElementById('ww-cooldown-badge')
+      wwCooldownBadge: document.getElementById('ww-cooldown-badge'),
+      
+      // Mel Spectrogram DOM element caches
+      melspecStatusBadge: document.getElementById('melspec-status-badge'),
+      melspecLoadedModel: document.getElementById('melspec-loaded-model'),
+      melspecBufferSize: document.getElementById('melspec-buffer-size'),
+      melspecProgressBarContainer: document.getElementById('melspec-progress-bar-container'),
+      melspecProgressPct: document.getElementById('melspec-progress-pct'),
+      melspecProgressFill: document.getElementById('melspec-progress-fill'),
+      melspecMetricFrames: document.getElementById('melspec-metric-frames'),
+      melspecMetricAvgLatency: document.getElementById('melspec-metric-avg-latency'),
+      melspecMetricMaxLatency: document.getElementById('melspec-metric-max-latency'),
+      melspecMetricDropped: document.getElementById('melspec-metric-dropped'),
+      melspecMetricLastTime: document.getElementById('melspec-metric-last-time')
     };
 
     // Instantiate and render VAD metrics sub-component
@@ -298,6 +383,9 @@ export class Dashboard {
         this.elements.timingMic.textContent = `${timings.mic.toFixed(2)} ms`;
         this.elements.timingDsp.textContent = `${timings.dsp.toFixed(2)} ms`;
         this.elements.timingVad.textContent = `${timings.vad.toFixed(2)} ms`;
+        if (this.elements.timingMelspec) {
+          this.elements.timingMelspec.textContent = `${timings.melspec.toFixed(2)} ms`;
+        }
         this.elements.timingWw.textContent = `${timings.ww.toFixed(2)} ms`;
         this.elements.timingTotal.textContent = `${timings.total.toFixed(2)} ms`;
       }
@@ -322,13 +410,16 @@ export class Dashboard {
     });
 
     eventBus.on(EVENTS.WAKEWORD_READY, () => {
-      this._handleWakewordStatus('Ready');
+      this._handleWakewordStatus('Waiting...');
       if (this.elements.wwStatusBadge) {
-        this.elements.wwStatusBadge.textContent = 'Ready (model loaded)';
-        this.elements.wwStatusBadge.className = 'badge success';
+        this.elements.wwStatusBadge.textContent = 'Waiting for Embedding Model';
+        this.elements.wwStatusBadge.className = 'badge warning';
       }
       if (this.elements.wwLoadedModel) {
         this.elements.wwLoadedModel.textContent = 'Hey Mycroft';
+      }
+      if (this.elements.wwInferenceReason) {
+        this.elements.wwInferenceReason.textContent = 'Speech Embedding Pending';
       }
     });
 
@@ -340,6 +431,74 @@ export class Dashboard {
       }
       if (this.elements.wwProgressBarContainer) {
         this.elements.wwProgressBarContainer.style.display = 'none';
+      }
+    });
+
+    // Mel Spectrogram subscriptions
+    eventBus.on(EVENTS.MELSPEC_READY, () => {
+      this._handleMelspecStatus('Ready');
+      if (this.elements.melspecStatusBadge) {
+        this.elements.melspecStatusBadge.textContent = 'Ready';
+        this.elements.melspecStatusBadge.className = 'badge success';
+      }
+      if (this.elements.melspecLoadedModel) {
+        this.elements.melspecLoadedModel.textContent = 'melspectrogram.onnx';
+      }
+    });
+
+    eventBus.on(EVENTS.MELSPEC_ERROR, () => {
+      this._handleMelspecStatus('Error');
+      if (this.elements.melspecStatusBadge) {
+        this.elements.melspecStatusBadge.textContent = 'Error';
+        this.elements.melspecStatusBadge.className = 'badge danger';
+      }
+      if (this.elements.melspecProgressBarContainer) {
+        this.elements.melspecProgressBarContainer.style.display = 'none';
+      }
+    });
+
+    eventBus.on(EVENTS.MELSPEC_PROGRESS, (progress) => {
+      if (this.elements.melspecProgressBarContainer) {
+        this.elements.melspecProgressBarContainer.style.display = 'block';
+        this.elements.melspecProgressPct.textContent = `${progress}%`;
+        this.elements.melspecProgressFill.style.width = `${progress}%`;
+        
+        if (this.elements.melspecStatusBadge) {
+          this.elements.melspecStatusBadge.textContent = `Downloading (${progress}%)`;
+          this.elements.melspecStatusBadge.className = 'badge warning';
+        }
+        
+        if (progress >= 100) {
+          setTimeout(() => {
+            if (this.elements.melspecProgressBarContainer) {
+              this.elements.melspecProgressBarContainer.style.display = 'none';
+            }
+          }, 1000);
+        }
+      }
+    });
+
+    eventBus.on(EVENTS.MELSPEC_METRICS, (metrics) => {
+      if (metrics.status) {
+        this._handleMelspecStatus(metrics.status);
+      }
+      if (this.elements.melspecBufferSize) {
+        this.elements.melspecBufferSize.textContent = `${metrics.bufferSize} samples`;
+      }
+      if (this.elements.melspecMetricFrames) {
+        this.elements.melspecMetricFrames.textContent = metrics.framesProduced;
+      }
+      if (this.elements.melspecMetricAvgLatency) {
+        this.elements.melspecMetricAvgLatency.textContent = metrics.avgLatency ? `${metrics.avgLatency.toFixed(2)} ms` : '-- ms';
+      }
+      if (this.elements.melspecMetricMaxLatency) {
+        this.elements.melspecMetricMaxLatency.textContent = metrics.maxLatency ? `${metrics.maxLatency.toFixed(2)} ms` : '-- ms';
+      }
+      if (this.elements.melspecMetricDropped) {
+        this.elements.melspecMetricDropped.textContent = metrics.droppedFrames || 0;
+      }
+      if (this.elements.melspecMetricLastTime) {
+        this.elements.melspecMetricLastTime.textContent = metrics.lastFeatureTime || '--';
       }
     });
   }
@@ -459,6 +618,26 @@ export class Dashboard {
     badge.textContent = state;
     if (state === 'Ready' || state === 'Active') {
       badge.className = 'badge success';
+    } else if (state === 'Error') {
+      badge.className = 'badge danger';
+    } else {
+      badge.className = 'badge inactive';
+    }
+  }
+
+  /**
+   * Update Mel Spectrogram badge.
+   */
+  _handleMelspecStatus(state) {
+    const badge = this.elements.melspecBadge;
+    if (!badge) return;
+    badge.textContent = state;
+    if (state === 'Ready') {
+      badge.className = 'badge success';
+    } else if (state === 'Processing') {
+      badge.className = 'badge primary-glow';
+    } else if (state === 'Loading') {
+      badge.className = 'badge warning';
     } else if (state === 'Error') {
       badge.className = 'badge danger';
     } else {

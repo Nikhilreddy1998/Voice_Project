@@ -42,6 +42,13 @@ export const EVENTS = {
   MELSPEC_METRICS: 'melspec:metrics',
   MELSPEC_PROGRESS: 'melspec:progress',
 
+  // Speech Embedding Events
+  EMBEDDING_READY: 'embedding:ready',
+  EMBEDDING_ERROR: 'embedding:error',
+  EMBEDDING_FEATURES: 'embedding:features',
+  EMBEDDING_METRICS: 'embedding:metrics',
+  EMBEDDING_PROGRESS: 'embedding:progress',
+
   // Performance/Telemetry Events
   METRICS_UPDATE: 'metrics:update', // Emits { latencyMs: number, fps: number, cpuEstimation: number }
   LOG: 'log', // Emits { timestamp: string, level: string, message: string }

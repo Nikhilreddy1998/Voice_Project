@@ -29,38 +29,45 @@ export class OpenWakeWordWrapper {
     // Bind listeners
     this._handleSpeechStart = this._handleSpeechStart.bind(this);
     this._handleSpeechEnd = this._handleSpeechEnd.bind(this);
-    this._handleMelFeatures = this._handleMelFeatures.bind(this);
-
+    this._handleEmbeddingFeatures = this._handleEmbeddingFeatures.bind(this);
+ 
     eventBus.on(EVENTS.SPEECH_START, this._handleSpeechStart);
     eventBus.on(EVENTS.SPEECH_END, this._handleSpeechEnd);
-    eventBus.on(EVENTS.MELSPEC_FEATURES, this._handleMelFeatures);
+    eventBus.on(EVENTS.EMBEDDING_FEATURES, this._handleEmbeddingFeatures);
   }
-
+ 
   _handleSpeechStart() {
     this.isSpeechActive = true;
     this.hasNotifiedPending = false;
   }
-
+ 
   _handleSpeechEnd() {
     this.isSpeechActive = false;
   }
-
+ 
   /**
-   * Listen to the Mel Spectrogram feature frames.
+   * Listen to the Speech Embedding feature tensors.
    * 
    * @param {Object} payload
-   * @param {Float32Array} payload.features
+   * @param {Float32Array} payload.embedding
    * @param {Array<number>} payload.shape
    */
-  _handleMelFeatures({ features, shape }) {
+  _handleEmbeddingFeatures({ embedding, shape }) {
     if (!this.isInitialized) return;
     
-    // Log a sample of received features in development mode to verify the pipe is working
-    if (this.config.mode === 'Development' && Math.random() < 0.02) {
-      logger.info('WakeWord', `Ingested Mel Spectrogram features frame: size=${features.length}, shape=[${shape.join(', ')}]`);
+    // Log a sample of received embeddings in development mode to verify the pipe is working
+    if (this.config.mode === 'Development' && Math.random() < 0.05) {
+      logger.info('WakeWord', `Ingested Speech Embedding frame: size=${embedding.length}, shape=[${shape.join(', ')}]`);
     }
-  }
 
+    // Set the status to Waiting for Wake Word Classifier and reason to Speech Embedding Ready – Classifier Pending
+    eventBus.emit(EVENTS.WAKEWORD_METRICS, {
+      status: 'Ready',
+      inferenceStatus: 'Waiting for Wake Word Classifier',
+      reason: 'Speech Embedding Ready – Classifier Pending'
+    });
+  }
+ 
   /**
    * Download the ONNX model, boot the ONNX session, and check metadata properties.
    * 
@@ -70,11 +77,11 @@ export class OpenWakeWordWrapper {
   async initialize(options = {}) {
     this.config = { ...this.config, ...options };
     logger.info('WakeWord', `Initializing OpenWakeWord Engine for target wake word "${this.config.wakeWord}"...`);
-
+ 
     // Declare URLs outside try so catch block can evict them from cache
     const localUrl = `/models/${this.config.model}.onnx`;
     const fallbackUrl = `https://raw.githubusercontent.com/CLFML/lowwi/main/models/example_wakewords/${this.config.model}.onnx`;
-
+ 
     try {
       // 1. Download/Cache model file with automatic local-to-remote fallback
       let modelBuffer;
@@ -84,10 +91,10 @@ export class OpenWakeWordWrapper {
         logger.warn('WakeWord', `Local model file not found or failed to load. Falling back to remote LFS URL: ${fallbackUrl}`);
         modelBuffer = await this.loader.loadModel(this.config.model, fallbackUrl);
       }
-
+ 
       // 2. Load and validate inside ONNX session
       await this.inference.initialize(modelBuffer, this.config.model);
-
+ 
       this.isInitialized = true;
       eventBus.emit(EVENTS.WAKEWORD_INITIALIZED);
       eventBus.emit(EVENTS.WAKEWORD_READY);
@@ -104,12 +111,12 @@ export class OpenWakeWordWrapper {
       } catch (cacheError) {
         logger.warn('WakeWord', `Failed to evict cache: ${cacheError.message}`);
       }
-
+ 
       eventBus.emit(EVENTS.WAKEWORD_ERROR);
       return false;
     }
   }
-
+ 
   /**
    * Process a single audio frame. Gated by VAD speech classification.
    * 
@@ -117,7 +124,7 @@ export class OpenWakeWordWrapper {
    */
   process(frame) {
     if (!this.isInitialized) return;
-
+ 
     if (this.isSpeechActive) {
       if (!this.hasNotifiedPending) {
         // Output the honest, transparent status log in the console
@@ -126,15 +133,15 @@ export class OpenWakeWordWrapper {
       }
     }
   }
-
+ 
   /**
    * Unsubscribe from events and dispose ONNX sessions.
    */
   dispose() {
     eventBus.off(EVENTS.SPEECH_START, this._handleSpeechStart);
     eventBus.off(EVENTS.SPEECH_END, this._handleSpeechEnd);
-    eventBus.off(EVENTS.MELSPEC_FEATURES, this._handleMelFeatures);
-
+    eventBus.off(EVENTS.EMBEDDING_FEATURES, this._handleEmbeddingFeatures);
+ 
     if (this.isInitialized) {
       this.inference.dispose();
     }

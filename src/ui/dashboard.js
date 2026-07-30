@@ -73,6 +73,12 @@ export class Dashboard {
                 </div>
               </div>
               <div class="status-item">
+                <span class="status-label">Speech Embedding</span>
+                <div class="status-indicator-wrapper">
+                  <span id="status-embedding-badge" class="badge inactive">Inactive</span>
+                </div>
+              </div>
+              <div class="status-item">
                 <span class="status-label">Wake Word Engine</span>
                 <div class="status-indicator-wrapper">
                   <span id="status-ww-badge" class="badge inactive">Waiting...</span>
@@ -202,6 +208,70 @@ export class Dashboard {
             </div>
           </section>
 
+          <!-- Speech Embedding Card -->
+          <section class="card embedding-card" style="border-color: rgba(99, 102, 241, 0.2) !important; box-shadow: 0 10px 30px -10px rgba(99, 102, 241, 0.1);">
+            <h2 style="color: #a5b4fc;">Speech Embedding</h2>
+            <div class="status-grid">
+              <div class="status-item flex-col-layout">
+                <div class="status-row">
+                  <span class="status-label">Status</span>
+                  <div class="status-indicator-wrapper">
+                    <span id="embedding-status-badge" class="badge inactive">Uninitialized</span>
+                  </div>
+                </div>
+                <div class="status-row" style="margin-top: 8px;">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Model</span>
+                  <span class="text-mono text-sm" id="embedding-loaded-model" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">--</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Input</span>
+                  <span class="text-mono text-sm" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">Mel Spectrogram</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Output</span>
+                  <span class="text-mono text-sm" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">Speech Embedding</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Feature Buffer</span>
+                  <span class="text-mono text-sm" id="embedding-buffer-size" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">0 / --</span>
+                </div>
+                
+                <div id="embedding-progress-bar-container" style="display: none; width: 100%; margin-top: 8px;">
+                  <div class="progress-bar-lbl" style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-text-muted); margin-bottom: 4px;">
+                    <span>Downloading Model...</span>
+                    <span id="embedding-progress-pct">0%</span>
+                  </div>
+                  <div class="progress-bar-bg" style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+                    <div id="embedding-progress-fill" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.1s;"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="status-item flex-col-layout">
+                <div class="status-row">
+                  <span class="status-label">Inference Count</span>
+                  <span class="text-mono" id="embedding-metric-inferences" style="font-weight: 600; color: var(--primary);">0</span>
+                </div>
+                <div class="status-row" style="margin-top: 8px;">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Average Latency</span>
+                  <span class="text-mono text-sm" id="embedding-metric-avg-latency" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">-- ms</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Max Latency</span>
+                  <span class="text-mono text-sm" id="embedding-metric-max-latency" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">-- ms</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Dropped Frames</span>
+                  <span class="text-mono text-sm" id="embedding-metric-dropped" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">0</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Last Embedding</span>
+                  <span class="text-mono text-sm" id="embedding-metric-last-time" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">--</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <!-- Telemetry Grid -->
           <section class="card telemetry-card">
             <h2>Real-time Performance</h2>
@@ -245,6 +315,10 @@ export class Dashboard {
                 <div class="timing-item">
                   <span class="timing-lbl">Mel Spectrogram</span>
                   <span class="timing-val" id="timing-melspec">-- ms</span>
+                </div>
+                <div class="timing-item">
+                  <span class="timing-lbl">Speech Embedding</span>
+                  <span class="timing-val" id="timing-embedding">-- ms</span>
                 </div>
                 <div class="timing-item">
                   <span class="timing-lbl">Wake Word</span>
@@ -322,7 +396,24 @@ export class Dashboard {
       melspecMetricAvgLatency: document.getElementById('melspec-metric-avg-latency'),
       melspecMetricMaxLatency: document.getElementById('melspec-metric-max-latency'),
       melspecMetricDropped: document.getElementById('melspec-metric-dropped'),
-      melspecMetricLastTime: document.getElementById('melspec-metric-last-time')
+      melspecMetricLastTime: document.getElementById('melspec-metric-last-time'),
+
+      // Speech Embedding badge
+      embeddingBadge: document.getElementById('status-embedding-badge'),
+      timingEmbedding: document.getElementById('timing-embedding'),
+
+      // Speech Embedding DOM element caches
+      embeddingStatusBadge: document.getElementById('embedding-status-badge'),
+      embeddingLoadedModel: document.getElementById('embedding-loaded-model'),
+      embeddingBufferSize: document.getElementById('embedding-buffer-size'),
+      embeddingProgressBarContainer: document.getElementById('embedding-progress-bar-container'),
+      embeddingProgressPct: document.getElementById('embedding-progress-pct'),
+      embeddingProgressFill: document.getElementById('embedding-progress-fill'),
+      embeddingMetricInferences: document.getElementById('embedding-metric-inferences'),
+      embeddingMetricAvgLatency: document.getElementById('embedding-metric-avg-latency'),
+      embeddingMetricMaxLatency: document.getElementById('embedding-metric-max-latency'),
+      embeddingMetricDropped: document.getElementById('embedding-metric-dropped'),
+      embeddingMetricLastTime: document.getElementById('embedding-metric-last-time')
     };
 
     // Instantiate and render VAD metrics sub-component
@@ -385,6 +476,9 @@ export class Dashboard {
         this.elements.timingVad.textContent = `${timings.vad.toFixed(2)} ms`;
         if (this.elements.timingMelspec) {
           this.elements.timingMelspec.textContent = `${timings.melspec.toFixed(2)} ms`;
+        }
+        if (this.elements.timingEmbedding) {
+          this.elements.timingEmbedding.textContent = `${timings.embedding.toFixed(2)} ms`;
         }
         this.elements.timingWw.textContent = `${timings.ww.toFixed(2)} ms`;
         this.elements.timingTotal.textContent = `${timings.total.toFixed(2)} ms`;
@@ -499,6 +593,95 @@ export class Dashboard {
       }
       if (this.elements.melspecMetricLastTime) {
         this.elements.melspecMetricLastTime.textContent = metrics.lastFeatureTime || '--';
+      }
+    });
+
+    // Speech Embedding subscriptions
+    eventBus.on(EVENTS.EMBEDDING_READY, () => {
+      this._handleEmbeddingStatus('Ready');
+      if (this.elements.embeddingStatusBadge) {
+        this.elements.embeddingStatusBadge.textContent = 'Ready';
+        this.elements.embeddingStatusBadge.className = 'badge success';
+      }
+      if (this.elements.embeddingLoadedModel) {
+        this.elements.embeddingLoadedModel.textContent = 'embedding_model.onnx';
+      }
+    });
+
+    eventBus.on(EVENTS.EMBEDDING_ERROR, () => {
+      this._handleEmbeddingStatus('Error');
+      if (this.elements.embeddingStatusBadge) {
+        this.elements.embeddingStatusBadge.textContent = 'Error';
+        this.elements.embeddingStatusBadge.className = 'badge danger';
+      }
+      if (this.elements.embeddingProgressBarContainer) {
+        this.elements.embeddingProgressBarContainer.style.display = 'none';
+      }
+    });
+
+    eventBus.on(EVENTS.EMBEDDING_PROGRESS, (progress) => {
+      if (this.elements.embeddingProgressBarContainer) {
+        this.elements.embeddingProgressBarContainer.style.display = 'block';
+        this.elements.embeddingProgressPct.textContent = `${progress}%`;
+        this.elements.embeddingProgressFill.style.width = `${progress}%`;
+        
+        if (this.elements.embeddingStatusBadge) {
+          this.elements.embeddingStatusBadge.textContent = `Downloading (${progress}%)`;
+          this.elements.embeddingStatusBadge.className = 'badge warning';
+        }
+        
+        if (progress >= 100) {
+          setTimeout(() => {
+            if (this.elements.embeddingProgressBarContainer) {
+              this.elements.embeddingProgressBarContainer.style.display = 'none';
+            }
+          }, 1000);
+        }
+      }
+    });
+
+    eventBus.on(EVENTS.EMBEDDING_METRICS, (metrics) => {
+      if (metrics.status) {
+        this._handleEmbeddingStatus(metrics.status);
+      }
+      if (this.elements.embeddingBufferSize) {
+        this.elements.embeddingBufferSize.textContent = `${metrics.bufferSize} / ${metrics.requiredFrames || 76}`;
+      }
+      if (this.elements.embeddingMetricInferences) {
+        this.elements.embeddingMetricInferences.textContent = metrics.inferenceCount;
+      }
+      if (this.elements.embeddingMetricAvgLatency) {
+        this.elements.embeddingMetricAvgLatency.textContent = metrics.avgLatency ? `${metrics.avgLatency.toFixed(2)} ms` : '-- ms';
+      }
+      if (this.elements.embeddingMetricMaxLatency) {
+        this.elements.embeddingMetricMaxLatency.textContent = metrics.maxLatency ? `${metrics.maxLatency.toFixed(2)} ms` : '-- ms';
+      }
+      if (this.elements.embeddingMetricDropped) {
+        this.elements.embeddingMetricDropped.textContent = metrics.droppedFrames || 0;
+      }
+      if (this.elements.embeddingMetricLastTime) {
+        this.elements.embeddingMetricLastTime.textContent = metrics.lastEmbeddingTime || '--';
+      }
+    });
+
+    // Wake Word Metrics UI listener
+    eventBus.on(EVENTS.WAKEWORD_METRICS, (metrics) => {
+      if (metrics.status && this.elements.wwStatusBadge) {
+        this.elements.wwStatusBadge.textContent = metrics.status;
+        if (metrics.status === 'Ready') {
+          this.elements.wwStatusBadge.className = 'badge success';
+        } else if (metrics.status === 'Waiting for Wake Word Classifier') {
+          this.elements.wwStatusBadge.className = 'badge warning';
+        }
+      }
+      if (metrics.inferenceStatus && this.elements.wwInferenceStatus) {
+        this.elements.wwInferenceStatus.textContent = metrics.inferenceStatus;
+        if (metrics.inferenceStatus === 'Waiting for Wake Word Classifier') {
+          this.elements.wwInferenceStatus.className = 'badge warning';
+        }
+      }
+      if (metrics.reason && this.elements.wwInferenceReason) {
+        this.elements.wwInferenceReason.textContent = metrics.reason;
       }
     });
   }
@@ -630,6 +813,26 @@ export class Dashboard {
    */
   _handleMelspecStatus(state) {
     const badge = this.elements.melspecBadge;
+    if (!badge) return;
+    badge.textContent = state;
+    if (state === 'Ready') {
+      badge.className = 'badge success';
+    } else if (state === 'Processing') {
+      badge.className = 'badge primary-glow';
+    } else if (state === 'Loading') {
+      badge.className = 'badge warning';
+    } else if (state === 'Error') {
+      badge.className = 'badge danger';
+    } else {
+      badge.className = 'badge inactive';
+    }
+  }
+
+  /**
+   * Update Speech Embedding badge.
+   */
+  _handleEmbeddingStatus(state) {
+    const badge = this.elements.embeddingBadge;
     if (!badge) return;
     badge.textContent = state;
     if (state === 'Ready') {

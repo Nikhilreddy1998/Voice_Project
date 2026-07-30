@@ -7,6 +7,7 @@ import { RNNoiseWrapper } from './dsp/rnnoise.js';
 import { WebRtcVadWrapper } from './vad/webrtc-vad.js';
 import { OpenWakeWordWrapper } from './wakeword/openwakeword.js';
 import { MelSpectrogram } from './wakeword/mel-spectrogram.js';
+import { SpeechEmbedding } from './wakeword/speech-embedding.js';
 import { Dashboard } from './ui/dashboard.js';
 
 // Instantiate module references
@@ -15,6 +16,7 @@ let rnnoise = null;
 let vad = null;
 let wakeword = null;
 let melspec = null;
+let speechEmbedding = null;
 
 // Initialize GUI Dashboard
 const appContainer = document.getElementById('app');
@@ -39,19 +41,23 @@ window.addEventListener('pipeline:init', async () => {
   // Initialize Mel Spectrogram Extractor
   melspec = new MelSpectrogram();
   
+  // Initialize Speech Embedding backbone
+  speechEmbedding = new SpeechEmbedding();
+  
   // Initialize OpenWakeWord module
   wakeword = new OpenWakeWordWrapper();
 
   // Load and initialize all libraries in parallel
-  const [micOk, dspOk, vadOk, wwOk, melspecOk] = await Promise.all([
+  const [micOk, dspOk, vadOk, wwOk, melspecOk, embeddingOk] = await Promise.all([
     micManager.initialize(),
     rnnoise.initialize(),
     vad.initialize(),
     wakeword.initialize(),
-    melspec.initialize()
+    melspec.initialize(),
+    speechEmbedding.initialize()
   ]);
 
-  if (micOk && dspOk && vadOk && wwOk && melspecOk) {
+  if (micOk && dspOk && vadOk && wwOk && melspecOk && embeddingOk) {
     logger.info('System', 'Pipeline modules initialized successfully. You can now start listening.');
     
     // Bind the real-time processing stream pipeline
@@ -78,8 +84,9 @@ window.addEventListener('pipeline:init', async () => {
       const dspMs = t1 - t0;
       const vadMs = t2 - t1;
       const melspecMs = t3 - t2;
+      const embeddingMs = speechEmbedding ? speechEmbedding.metrics.lastLatencyMs : 0;
       const wwMs = t4 - t3;
-      const totalMs = dspMs + vadMs + melspecMs + wwMs;
+      const totalMs = dspMs + vadMs + melspecMs + embeddingMs + wwMs;
 
       // Dispatch stage timings (estimated mic queue latency is 0.2ms)
       eventBus.emit('pipeline:timing', {
@@ -87,6 +94,7 @@ window.addEventListener('pipeline:init', async () => {
         dsp: dspMs,
         vad: vadMs,
         melspec: melspecMs,
+        embedding: embeddingMs,
         ww: wwMs,
         total: 0.2 + totalMs
       });
@@ -127,5 +135,6 @@ window.addEventListener('beforeunload', async () => {
   if (rnnoise) rnnoise.dispose();
   if (vad) vad.dispose();
   if (melspec) melspec.dispose();
+  if (speechEmbedding) speechEmbedding.dispose();
   if (wakeword) await wakeword.dispose();
 });

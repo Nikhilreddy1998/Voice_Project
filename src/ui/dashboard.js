@@ -111,6 +111,10 @@ export class Dashboard {
                   <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Mode</span>
                   <span class="badge text-xs" id="ww-mode-badge" style="font-size: 0.75rem; background: rgba(139, 92, 246, 0.15); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.3);">Development</span>
                 </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Dropped Frames</span>
+                  <span class="text-mono text-sm" id="ww-metric-dropped" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">0</span>
+                </div>
                 
                 <div id="ww-progress-bar-container" style="display: none; width: 100%; margin-top: 8px;">
                   <div class="progress-bar-lbl" style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-text-muted); margin-bottom: 4px;">
@@ -131,6 +135,18 @@ export class Dashboard {
                 <div class="status-row" style="margin-top: 8px;">
                   <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Reason</span>
                   <span class="text-mono text-sm" id="ww-inference-reason" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--warning);">Feature Extractor Pending</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Confidence</span>
+                  <span class="text-mono text-sm" id="ww-metric-confidence" style="font-size: 0.85rem; font-family: var(--font-mono); color: #818cf8; font-weight: bold;">0.0000</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Threshold</span>
+                  <span class="text-mono text-sm" id="ww-metric-threshold" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">0.50</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Inferences</span>
+                  <span class="text-mono text-sm" id="ww-metric-inferences" style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--color-text-main);">0</span>
                 </div>
                 <div class="status-row">
                   <span class="status-label text-sm" style="font-size: 0.8rem; color: var(--color-text-muted);">Last Detection</span>
@@ -384,6 +400,10 @@ export class Dashboard {
       wwMetricLastDetect: document.getElementById('ww-metric-last-detect'),
       wwMetricDetections: document.getElementById('ww-metric-detections'),
       wwCooldownBadge: document.getElementById('ww-cooldown-badge'),
+      wwMetricDropped: document.getElementById('ww-metric-dropped'),
+      wwMetricConfidence: document.getElementById('ww-metric-confidence'),
+      wwMetricThreshold: document.getElementById('ww-metric-threshold'),
+      wwMetricInferences: document.getElementById('ww-metric-inferences'),
       
       // Mel Spectrogram DOM element caches
       melspecStatusBadge: document.getElementById('melspec-status-badge'),
@@ -510,7 +530,10 @@ export class Dashboard {
         this.elements.wwStatusBadge.className = 'badge warning';
       }
       if (this.elements.wwLoadedModel) {
-        this.elements.wwLoadedModel.textContent = 'Hey Mycroft';
+        this.elements.wwLoadedModel.textContent = 'hey_louie.onnx';
+      }
+      if (this.elements.wwModeBadge) {
+        this.elements.wwModeBadge.textContent = 'Production/Custom';
       }
       if (this.elements.wwInferenceReason) {
         this.elements.wwInferenceReason.textContent = 'Speech Embedding Pending';
@@ -668,20 +691,59 @@ export class Dashboard {
     eventBus.on(EVENTS.WAKEWORD_METRICS, (metrics) => {
       if (metrics.status && this.elements.wwStatusBadge) {
         this.elements.wwStatusBadge.textContent = metrics.status;
-        if (metrics.status === 'Ready') {
-          this.elements.wwStatusBadge.className = 'badge success';
-        } else if (metrics.status === 'Waiting for Wake Word Classifier') {
-          this.elements.wwStatusBadge.className = 'badge warning';
+        this.elements.wwStatusBadge.className = 'badge';
+        if (metrics.status === 'Ready' || metrics.status === 'Active') {
+          this.elements.wwStatusBadge.classList.add('success');
+        } else if (metrics.status === 'Error') {
+          this.elements.wwStatusBadge.classList.add('danger');
+        } else {
+          this.elements.wwStatusBadge.classList.add('inactive');
         }
       }
       if (metrics.inferenceStatus && this.elements.wwInferenceStatus) {
         this.elements.wwInferenceStatus.textContent = metrics.inferenceStatus;
-        if (metrics.inferenceStatus === 'Waiting for Wake Word Classifier') {
-          this.elements.wwInferenceStatus.className = 'badge warning';
+        this.elements.wwInferenceStatus.className = 'badge';
+        if (metrics.inferenceStatus === 'Active') {
+          this.elements.wwInferenceStatus.classList.add('success');
+        } else if (metrics.inferenceStatus === 'Cooldown') {
+          this.elements.wwInferenceStatus.classList.add('warning');
+        } else if (metrics.inferenceStatus === 'Buffering') {
+          this.elements.wwInferenceStatus.classList.add('warning');
+        } else {
+          this.elements.wwInferenceStatus.classList.add('inactive');
         }
       }
       if (metrics.reason && this.elements.wwInferenceReason) {
         this.elements.wwInferenceReason.textContent = metrics.reason;
+      }
+      if (this.elements.wwLoadedModel) {
+        this.elements.wwLoadedModel.textContent = 'hey_louie.onnx';
+      }
+      if (this.elements.wwModeBadge) {
+        this.elements.wwModeBadge.textContent = 'Production/Custom';
+      }
+      if (metrics.lastConfidence !== undefined && this.elements.wwMetricConfidence) {
+        this.elements.wwMetricConfidence.textContent = metrics.lastConfidence.toFixed(4);
+      }
+      if (this.elements.wwMetricThreshold) {
+        this.elements.wwMetricThreshold.textContent = '0.50';
+      }
+      if (metrics.inferenceCount !== undefined && this.elements.wwMetricInferences) {
+        this.elements.wwMetricInferences.textContent = metrics.inferenceCount;
+      }
+      if (metrics.droppedFrames !== undefined && this.elements.wwMetricDropped) {
+        this.elements.wwMetricDropped.textContent = metrics.droppedFrames;
+      }
+      if (this.elements.wwMetricLastDetect) {
+        this.elements.wwMetricLastDetect.textContent = metrics.lastDetectionTime || '--';
+      }
+      if (metrics.detectionCount !== undefined && this.elements.wwMetricDetections) {
+        this.elements.wwMetricDetections.textContent = metrics.detectionCount;
+      }
+      if (this.elements.wwCooldownBadge) {
+        const active = !!metrics.cooldownActive;
+        this.elements.wwCooldownBadge.textContent = active ? 'Active' : 'Inactive';
+        this.elements.wwCooldownBadge.className = active ? 'badge warning alert-glow' : 'badge inactive';
       }
     });
   }

@@ -77,15 +77,14 @@ window.addEventListener('pipeline:init', async () => {
       melspec.process(cleanFrame);
       const t3 = performance.now();
       
-      // 4. Wake Word Classifier Inference (Phase 2: listens only, doesn't infer)
+      // 4. Wake Word Classifier Inference
       wakeword.process(cleanFrame);
-      const t4 = performance.now();
 
       const dspMs = t1 - t0;
       const vadMs = t2 - t1;
       const melspecMs = t3 - t2;
       const embeddingMs = speechEmbedding ? speechEmbedding.metrics.lastLatencyMs : 0;
-      const wwMs = t4 - t3;
+      const wwMs = (wakeword && wakeword.inference && wakeword.inference.metrics) ? wakeword.inference.metrics.lastLatencyMs : 0;
       const totalMs = dspMs + vadMs + melspecMs + embeddingMs + wwMs;
 
       // Dispatch stage timings (estimated mic queue latency is 0.2ms)

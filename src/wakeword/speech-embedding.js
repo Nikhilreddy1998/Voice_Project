@@ -166,16 +166,12 @@ Type: ${this.inputType || 'Unknown'}
    * @param {Float32Array} payload.features
    * @param {Array<number>} payload.shape
    */
-  async _handleMelFeatures({ features, shape }) {
+  async _handleMelFeatures({ features }) {
     if (!this.isInitialized || !this.session) return;
 
     try {
-      const numNewFrames = shape[1] || 8;
-      const numChannels = shape[2] || 32;
-
-      if (numChannels !== this.numChannels) {
-        logger.warn('SpeechEmbedding', `Received feature channels (${numChannels}) do not match model expectation (${this.numChannels})`);
-      }
+      const numChannels = this.numChannels; // strictly 32
+      const numNewFrames = Math.floor(features.length / numChannels);
 
       // 1. Accumulate new frames into the rolling buffer
       for (let i = 0; i < numNewFrames; i++) {

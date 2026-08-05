@@ -12,8 +12,8 @@ export class OpenWakeWordWrapper {
   constructor() {
     this.config = {
       wakeWord: 'Hey Louie',
-      model: 'hey_mycroft',
-      mode: 'Development',
+      model: 'hey_louie',
+      mode: 'Production',
       threshold: 0.50,
       cooldown: 2000,
       sampleRate: 16000
@@ -55,17 +55,12 @@ export class OpenWakeWordWrapper {
   _handleEmbeddingFeatures({ embedding, shape }) {
     if (!this.isInitialized) return;
     
-    // Log a sample of received embeddings in development mode to verify the pipe is working
     if (this.config.mode === 'Development' && Math.random() < 0.05) {
       logger.info('WakeWord', `Ingested Speech Embedding frame: size=${embedding.length}, shape=[${shape.join(', ')}]`);
     }
 
-    // Set the status to Waiting for Wake Word Classifier and reason to Speech Embedding Ready – Classifier Pending
-    eventBus.emit(EVENTS.WAKEWORD_METRICS, {
-      status: 'Ready',
-      inferenceStatus: 'Waiting for Wake Word Classifier',
-      reason: 'Speech Embedding Ready – Classifier Pending'
-    });
+    // Run inference using the new custom classifier
+    this.inference.process(embedding);
   }
  
   /**
@@ -122,7 +117,7 @@ export class OpenWakeWordWrapper {
    * 
    * @param {Float32Array} frame - Raw/denoised PCM float32 audio frame.
    */
-  process(frame) {
+  process(_frame) {
     if (!this.isInitialized) return;
  
     if (this.isSpeechActive) {

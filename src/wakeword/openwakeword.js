@@ -74,8 +74,9 @@ export class OpenWakeWordWrapper {
     logger.info('WakeWord', `Initializing OpenWakeWord Engine for target wake word "${this.config.wakeWord}"...`);
  
     // Declare URLs outside try so catch block can evict them from cache
-    const localUrl = `/models/${this.config.model}.onnx`;
-    const fallbackUrl = `https://raw.githubusercontent.com/CLFML/lowwi/main/models/example_wakewords/${this.config.model}.onnx`;
+    const version = this.config.model === 'hey_louie' ? '?v=1.1' : '';
+    const localUrl = `/models/${this.config.model}.onnx${version}`;
+    const fallbackUrl = `https://raw.githubusercontent.com/CLFML/lowwi/main/models/example_wakewords/${this.config.model}.onnx${version}`;
  
     try {
       // 1. Download/Cache model file with automatic local-to-remote fallback

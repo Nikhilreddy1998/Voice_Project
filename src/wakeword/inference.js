@@ -5,6 +5,7 @@ import { logger } from '../utils/logger.js';
 
 // Configure ONNX WebAssembly paths to resolve dependencies locally (same-origin)
 ort.env.wasm.wasmPaths = '/';
+ort.env.wasm.numThreads = 1;
 
 /**
  * WakeWordInference wraps the ONNX Runtime Web session,

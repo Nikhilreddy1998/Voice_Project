@@ -6,6 +6,7 @@ import { ModelLoader } from './model-loader.js';
 
 // Configure ONNX WebAssembly paths to resolve dependencies locally (same-origin)
 ort.env.wasm.wasmPaths = '/';
+ort.env.wasm.numThreads = 1;
 
 /**
  * SpeechEmbedding runs Google's Speech Embedding backbone model

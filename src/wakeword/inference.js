@@ -3,8 +3,8 @@ import { eventBus } from '../events/event-bus.js';
 import { EVENTS } from '../utils/constants.js';
 import { logger } from '../utils/logger.js';
 
-// Configure ONNX WebAssembly paths to resolve dependencies via dynamic CDN
-ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+// Configure ONNX WebAssembly paths to resolve dependencies locally (same-origin)
+ort.env.wasm.wasmPaths = '/';
 
 /**
  * WakeWordInference wraps the ONNX Runtime Web session,

@@ -73,16 +73,12 @@ window.addEventListener('pipeline:init', async () => {
       vad.process(cleanFrame);
       const t2 = performance.now();
       
-      // 3. Mel Spectrogram Extraction
+      // 3. Mel Spectrogram Extraction (runs inference asynchronously when buffer is full)
       melspec.process(cleanFrame);
-      const t3 = performance.now();
-      
-      // 4. Wake Word Classifier Inference
-      wakeword.process(cleanFrame);
 
       const dspMs = t1 - t0;
       const vadMs = t2 - t1;
-      const melspecMs = t3 - t2;
+      const melspecMs = melspec ? melspec.metrics.lastLatencyMs : 0;
       const embeddingMs = speechEmbedding ? speechEmbedding.metrics.lastLatencyMs : 0;
       const wwMs = (wakeword && wakeword.inference && wakeword.inference.metrics) ? wakeword.inference.metrics.lastLatencyMs : 0;
       const totalMs = dspMs + vadMs + melspecMs + embeddingMs + wwMs;

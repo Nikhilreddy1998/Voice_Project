@@ -65,7 +65,7 @@ export class SpeechEmbedding {
       let modelBuffer;
       try {
         modelBuffer = await this.loader.loadModel('embedding_model', localUrl, EVENTS.EMBEDDING_PROGRESS);
-      } catch (_localError) {
+      } catch {
         logger.warn('SpeechEmbedding', `Local model file not found or failed to load. Falling back to remote: ${fallbackUrl}`);
         modelBuffer = await this.loader.loadModel('embedding_model', fallbackUrl, EVENTS.EMBEDDING_PROGRESS);
       }
@@ -191,8 +191,6 @@ Type: ${this.inputType || 'Unknown'}
 
       // 3. Run inference only when we have filled the buffer
       if (this.frameBuffer.length === this.requiredFrames) {
-        const t0 = performance.now();
-
         // Prepare the flat float array
         const flatFeatures = new Float32Array(this.requiredFrames * this.numChannels);
         for (let i = 0; i < this.requiredFrames; i++) {
@@ -215,15 +213,16 @@ Type: ${this.inputType || 'Unknown'}
         const feeds = {};
         feeds[this.inputName] = inputTensor;
 
+        const runT0 = performance.now();
         const outputMap = await this.session.run(feeds);
+        const runT1 = performance.now();
+        const durationMs = runT1 - runT0;
+
         const outputTensor = outputMap[this.outputName];
 
         if (!outputTensor) {
           throw new Error(`Inference returned empty results for output node: ${this.outputName}`);
         }
-
-        const t1 = performance.now();
-        const durationMs = t1 - t0;
 
         // 4. Update Metrics
         this.metrics.inferenceCount++;

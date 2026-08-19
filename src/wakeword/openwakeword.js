@@ -4,6 +4,8 @@ import { logger } from '../utils/logger.js';
 import { ModelLoader } from './model-loader.js';
 import { WakeWordInference } from './inference.js';
 
+const HEY_LOUIE_MODEL_VERSION = '1.1';
+
 /**
  * OpenWakeWordWrapper coordinates model downloading, ONNX session initialization,
  * event hooks, and conditional execution gating.
@@ -23,26 +25,11 @@ export class OpenWakeWordWrapper {
     this.inference = new WakeWordInference();
     
     this.isInitialized = false;
-    this.isSpeechActive = false;
-    this.hasNotifiedPending = false;
 
     // Bind listeners
-    this._handleSpeechStart = this._handleSpeechStart.bind(this);
-    this._handleSpeechEnd = this._handleSpeechEnd.bind(this);
     this._handleEmbeddingFeatures = this._handleEmbeddingFeatures.bind(this);
  
-    eventBus.on(EVENTS.SPEECH_START, this._handleSpeechStart);
-    eventBus.on(EVENTS.SPEECH_END, this._handleSpeechEnd);
     eventBus.on(EVENTS.EMBEDDING_FEATURES, this._handleEmbeddingFeatures);
-  }
- 
-  _handleSpeechStart() {
-    this.isSpeechActive = true;
-    this.hasNotifiedPending = false;
-  }
- 
-  _handleSpeechEnd() {
-    this.isSpeechActive = false;
   }
  
   /**
@@ -74,7 +61,7 @@ export class OpenWakeWordWrapper {
     logger.info('WakeWord', `Initializing OpenWakeWord Engine for target wake word "${this.config.wakeWord}"...`);
  
     // Declare URLs outside try so catch block can evict them from cache
-    const version = this.config.model === 'hey_louie' ? '?v=1.1' : '';
+    const version = this.config.model === 'hey_louie' ? `?v=${HEY_LOUIE_MODEL_VERSION}` : '';
     const localUrl = `/models/${this.config.model}.onnx${version}`;
     const fallbackUrl = `https://raw.githubusercontent.com/CLFML/lowwi/main/models/example_wakewords/${this.config.model}.onnx${version}`;
  
@@ -83,7 +70,7 @@ export class OpenWakeWordWrapper {
       let modelBuffer;
       try {
         modelBuffer = await this.loader.loadModel(this.config.model, localUrl);
-      } catch (localError) {
+      } catch {
         logger.warn('WakeWord', `Local model file not found or failed to load. Falling back to remote LFS URL: ${fallbackUrl}`);
         modelBuffer = await this.loader.loadModel(this.config.model, fallbackUrl);
       }
@@ -114,28 +101,9 @@ export class OpenWakeWordWrapper {
   }
  
   /**
-   * Process a single audio frame. Gated by VAD speech classification.
-   * 
-   * @param {Float32Array} frame - Raw/denoised PCM float32 audio frame.
-   */
-  process(_frame) {
-    if (!this.isInitialized) return;
- 
-    if (this.isSpeechActive) {
-      if (!this.hasNotifiedPending) {
-        // Output the honest, transparent status log in the console
-        logger.info('WakeWord', 'VAD Speech active. Engine is ready and waiting for feature extraction backbone (Phase 2).');
-        this.hasNotifiedPending = true;
-      }
-    }
-  }
- 
-  /**
    * Unsubscribe from events and dispose ONNX sessions.
    */
   dispose() {
-    eventBus.off(EVENTS.SPEECH_START, this._handleSpeechStart);
-    eventBus.off(EVENTS.SPEECH_END, this._handleSpeechEnd);
     eventBus.off(EVENTS.EMBEDDING_FEATURES, this._handleEmbeddingFeatures);
  
     if (this.isInitialized) {
@@ -143,8 +111,6 @@ export class OpenWakeWordWrapper {
     }
     
     this.isInitialized = false;
-    this.isSpeechActive = false;
-    this.hasNotifiedPending = false;
     logger.info('WakeWord', 'OpenWakeWord Engine resources disposed.');
   }
 }

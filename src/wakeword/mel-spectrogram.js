@@ -23,6 +23,9 @@ export class MelSpectrogram {
     this.audioBuffer = new Float32Array(this.bufferCapacity);
     this.bufferLength = 0;
 
+    this.inputName = '';
+    this.outputName = '';
+
     // Metrics tracking
     this.metrics = {
       framesProcessed: 0,
@@ -31,7 +34,8 @@ export class MelSpectrogram {
       maxExtractionTimeMs: 0,
       avgExtractionTimeMs: 0,
       droppedFrames: 0,
-      lastFeatureTimestamp: null
+      lastFeatureTimestamp: null,
+      lastLatencyMs: 0.0
     };
   }
 
@@ -52,7 +56,7 @@ export class MelSpectrogram {
       let modelBuffer;
       try {
         modelBuffer = await this.loader.loadModel('melspectrogram', localUrl, EVENTS.MELSPEC_PROGRESS);
-      } catch (localError) {
+      } catch {
         logger.warn('MelSpectrogram', `Local model file not found or failed to load. Falling back to remote LFS URL: ${fallbackUrl}`);
         modelBuffer = await this.loader.loadModel('melspectrogram', fallbackUrl, EVENTS.MELSPEC_PROGRESS);
       }
@@ -65,6 +69,9 @@ export class MelSpectrogram {
       // 3. Log model inputs/outputs structure
       const inputNames = this.session.inputNames;
       const outputNames = this.session.outputNames;
+      
+      this.inputName = inputNames[0];
+      this.outputName = outputNames[0];
 
       logger.info('MelSpectrogram', `Model Loaded Successfully. Input nodes: ${inputNames.join(', ')}, Output nodes: ${outputNames.join(', ')}`);
 
@@ -126,17 +133,23 @@ export class MelSpectrogram {
    * @param {Float32Array} chunk 
    */
   async _runInference(chunk) {
-    const t0 = performance.now();
     try {
       // 1. Create input tensor
       const inputTensor = new ort.Tensor('float32', chunk, [1, 1280]);
 
       // 2. Run inference
-      const outputMap = await this.session.run({ input: inputTensor });
-      const outputTensor = outputMap.output;
+      const feeds = {};
+      feeds[this.inputName] = inputTensor;
+
+      const runT0 = performance.now();
+      const outputMap = await this.session.run(feeds);
+      const runT1 = performance.now();
+      const runDurationMs = runT1 - runT0;
+
+      const outputTensor = outputMap[this.outputName];
 
       if (!outputTensor) {
-        throw new Error('ONNX model returned empty outputs or output tensor is missing.');
+        throw new Error(`ONNX model returned empty outputs or output tensor is missing for node: ${this.outputName}`);
       }
 
       const rawData = outputTensor.data;
@@ -147,15 +160,13 @@ export class MelSpectrogram {
         processedData[i] = (rawData[i] / 10.0) + 2.0;
       }
 
-      const t1 = performance.now();
-      const durationMs = t1 - t0;
-
       // 4. Update metrics
       this.metrics.framesProduced += 8; // Each inference yields 8 Mel spectrogram frames (80ms total)
-      this.metrics.totalExtractionTimeMs += durationMs;
-      this.metrics.maxExtractionTimeMs = Math.max(this.metrics.maxExtractionTimeMs, durationMs);
+      this.metrics.totalExtractionTimeMs += runDurationMs;
+      this.metrics.maxExtractionTimeMs = Math.max(this.metrics.maxExtractionTimeMs, runDurationMs);
       this.metrics.avgExtractionTimeMs = this.metrics.totalExtractionTimeMs / (this.metrics.framesProduced / 8);
       this.metrics.lastFeatureTimestamp = new Date().toLocaleTimeString();
+      this.metrics.lastLatencyMs = runDurationMs;
 
       // 5. Emit events
       eventBus.emit(EVENTS.MELSPEC_FEATURES, {
@@ -186,6 +197,7 @@ export class MelSpectrogram {
       bufferSize: this.bufferLength,
       avgLatency: this.metrics.avgExtractionTimeMs,
       maxLatency: this.metrics.maxExtractionTimeMs,
+      lastLatency: this.metrics.lastLatencyMs,
       lastFeatureTime: this.metrics.lastFeatureTimestamp || '--',
       droppedFrames: this.metrics.droppedFrames
     });
@@ -205,7 +217,8 @@ export class MelSpectrogram {
       maxExtractionTimeMs: 0,
       avgExtractionTimeMs: 0,
       droppedFrames: 0,
-      lastFeatureTimestamp: null
+      lastFeatureTimestamp: null,
+      lastLatencyMs: 0.0
     };
     logger.info('MelSpectrogram', 'Mel Spectrogram Extractor disposed.');
     this._emitMetrics('Uninitialized');

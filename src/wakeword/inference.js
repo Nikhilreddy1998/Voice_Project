@@ -155,8 +155,6 @@ Status         : Ready (inference active)`);
     }
 
     try {
-      const t0 = performance.now();
-
       // 4. Flatten the rolling window of size 16 * 96
       const flatWindow = new Float32Array(16 * 96);
       for (let i = 0; i < 16; i++) {
@@ -168,7 +166,11 @@ Status         : Ready (inference active)`);
       const feeds = {};
       feeds[this.session.inputNames[0]] = inputTensor;
 
+      const runT0 = performance.now();
       const outputMap = await this.session.run(feeds);
+      const runT1 = performance.now();
+      const latencyMs = runT1 - runT0;
+
       const outputTensor = outputMap[this.session.outputNames[0]];
 
       if (!outputTensor) {
@@ -176,8 +178,6 @@ Status         : Ready (inference active)`);
       }
 
       const probability = outputTensor.data[0];
-      const t1 = performance.now();
-      const latencyMs = t1 - t0;
 
       // 6. Update Performance & Telemetry metrics
       this.metrics.inferenceCount++;

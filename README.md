@@ -10,17 +10,21 @@ This project integrates browser Web Audio APIs, WebAssembly noise suppression (R
 
 The system uses a pipeline pattern where audio frames flow from the microphone to the wake word classifier. Communication between modules is decoupled using an application-wide **Event Bus**.
 
+### Data Flow Pipeline
 ```mermaid
 graph TD
-    A[MicrophoneManager] -->|1. Capture Raw Audio| B(AudioWorkletProcessor)
+    A[Microphone] -->|1. Capture Raw Audio| B(AudioWorklet)
     B -->|2. Emit MIC_STREAM_DATA| C[Event Bus]
-    C -->|3. Propagate Frame| D[RNNoiseWrapper]
-    D -->|4. Suppress Background Noise| E[WebRtcVadWrapper]
-    E -->|5. Detect Voice Activity| F[OpenWakeWordWrapper]
-    F -->|6. Run Classifier Inference| G{Wake Word?}
-    G -->|Yes| H[Emit WAKEWORD_DETECTED]
-    G -->|No| I[Continue Listening]
-    C -->|7. Telemetry & Logs| J[Dashboard UI]
+    C -->|3. Propagate Frame| D[RNNoise Denoising]
+    D -->|4. Suppress Noise| E[WebRTC VAD]
+    E -->|5. Detect Voice Activity| F[Mel Spectrogram Extractor]
+    F -->|6. Extract Mel Frames| G[Speech Embedding Backbone]
+    G -->|7. Emit EMBEDDING_FEATURES| H[OpenWakeWordWrapper]
+    H -->|8. WakeWordInference| I[Rolling 16x96 Embedding Buffer]
+    I -->|9. hey_louie.onnx| J[Confidence Score]
+    J -->|10. Confidence >= Threshold| K[Wake Word Detected!]
+    K -->|11. Trigger Cooldown 2s| L[Cooldown Locked]
+    C -->|12. Telemetry & Logs| M[Dashboard UI]
 ```
 
 ### Folder Structure
@@ -31,6 +35,7 @@ graph TD
 ├── index.html           # Application DOM entry page and mount target
 ├── package.json         # Build dependencies, scripts, and engine specs
 ├── vite.config.js       # Vite bundler options, including COOP/COEP headers
+├── netlify.toml         # Production security headers configuration
 └── src/
     ├── main.js          # App bootstrapper and pipeline controller
     ├── style.css        # Premium Glassmorphism UI styling
@@ -49,18 +54,28 @@ graph TD
     ├── vad/
     │   └── webrtc-vad.js    # WebRTC Voice Activity Detection wrapper
     └── wakeword/
-        └── openwakeword.js  # ONNX Runtime Web OpenWakeWord inference session
+        ├── openwakeword.js  # Coordinates downloads, caches, and event flow
+        ├── model-loader.js  # Downloads model buffers with local-to-remote fallback
+        ├── inference.js     # ONNX session runner & temporal embedding buffer
+        ├── mel-spectrogram.js # Runs melspectrogram.onnx dynamically
+        └── speech-embedding.js # Runs embedding_model.onnx dynamically
 ```
 
 ---
 
-## Current Milestone
+## Current Status & Milestones
 
-Currently, this repository represents the **Foundation & Architecture scaffolding** milestone. 
-- All project configuration, build systems (Vite), and linters (ESLint) are fully configured.
-- Folder hierarchies and modular placeholder classes are set up with defined interface boundaries.
-- The UI dashboard renders real-time performance meters, module badges, and scrollable logs connected to the event bus.
-- Pipeline modules are linked together in `src/main.js` using event listeners ready for implementation.
+All development phases for the pipeline are complete:
+- **Phase 1 Complete**: Microphone & AudioWorklet capture pipeline integration.
+- **Phase 2 Complete**: RNNoise WebAssembly integration for noise suppression.
+- **Phase 3 Complete**: WebRTC VAD wrapper compilation and speech state detection.
+- **Phase 4 Complete**: Custom "Hey Louie" Classifier integration running Mel Spectrogram features into a Speech Embedding backbone and a classification model.
+
+### Dataset & Training Status
+- The current production classifier (`hey_louie.onnx`) was initially trained using **synthetic data** generated from Text-to-Speech (TTS) voices.
+- Speaker-independent evaluation on the test set revealed a relatively high false-negative rate (meaning the wake word is sometimes missed in real-world human scenarios).
+- **Next Step**: Collecting **real human recordings** from a diverse pool of speakers to retrain the classifier head and improve robustness.
+- **Validation Rule**: The existing production model must not be replaced unless a newly trained model demonstrates objective improvements on speaker-independent test splits while keeping False Positive Rates (FPR) under `5.0%`.
 
 ---
 
@@ -86,31 +101,17 @@ Currently, this repository represents the **Foundation & Architecture scaffoldin
    npm run build
    ```
 
----
-
-## Future Roadmap & Modules Implementation
-
-This project is built iteratively, implementing and testing one module at a time to ensure stability:
-
-1. **Milestone 1 (Current)**: Project Scaffolding, Event Bus, and UI Dashboard.
-2. **Milestone 2**: Microphone & AudioWorklet capture pipeline integration (Web Audio API).
-3. **Milestone 3**: RNNoise WebAssembly integration for client-side noise suppression.
-4. **Milestone 4**: WebRTC VAD wrapper compilation and speech state detection.
-5. **Milestone 5**: ONNX Runtime Web setup, OpenWakeWord model caching, and classification.
-6. **Milestone 6**: End-to-end integration testing, visualizer upgrades, and final deployment.
+5. **Train / Evaluate Model**:
+   ```bash
+   python scripts/train_wakeword.py
+   ```
 
 ---
 
-## Known Limitations
+## Known Constraints & Architecture Details
 
-- **Cross-Origin Security**: Because the pipeline will run multi-threaded WebAssembly in production, the server must supply COOP (`Cross-Origin-Opener-Policy: same-origin`) and COEP (`Cross-Origin-Embedder-Policy: require-corp`) headers (already configured in `vite.config.js`).
+- **Security Headers Required**: Because the pipeline runs multi-threaded WebAssembly in production, the host server must supply COOP (`Cross-Origin-Opener-Policy: same-origin`) and COEP (`Cross-Origin-Embedder-Policy: require-corp`) headers. This is handled by `vite.config.js` in development and `netlify.toml` in production Netlify deployments.
 - **Sample Rate Locking**: The models require exactly `16000Hz` mono PCM input. Browsers with alternate internal sample rates require resampling inside the Web Audio graph.
-- **WASM Support**: Devices running old web views without WebAssembly/AudioWorklet support will fall back gracefully.
+- **Dynamic Node Names**: The browser-side ONNX Runtime Web wrapper dynamically resolves input and output tensor node names from the model files instead of using hardcoded assumptions.
+- ** authoritativeness of Latency**: Performance latency timings displayed in the dashboard represent the actual ONNX session execution duration (`session.run` call) rather than wrapper/scheduling times.
 
----
-
-## Performance Goals
-
-- **Latency**: End-to-end audio chunk processing latency `< 45ms`.
-- **CPU Overhead**: Average CPU usage under `8%` on modern mobile devices.
-- **Accuracy**: Wake word true-positive detection rate `> 95%` in environments with moderate background noise (`SNR > 10dB`).

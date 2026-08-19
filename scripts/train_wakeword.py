@@ -336,7 +336,7 @@ def split_dataset(all_samples, seed=42):
     train_files, val_files, test_files = [], [], []
     
     for s in all_samples:
-        is_independent = s['speaker'] in ['independent_noise', 'independent_speech', 'unknown']
+        is_independent = s['speaker'] in ['independent_noise', 'independent_speech', 'unknown'] or s['speaker'].startswith('independent_')
         
         if not is_independent:
             # Route by speaker

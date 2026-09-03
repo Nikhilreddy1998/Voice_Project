@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 import random
 import numpy as np
@@ -10,6 +11,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
 import comtypes.client
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from validate_dataset import validate_dataset, print_summary
 
 # Parameters
 TARGET_SR = 16000
@@ -197,11 +201,11 @@ def load_human_dataset():
     # Positive samples from dataset/positive/speaker_XX/*.wav
     pos_dir = os.path.join(DATASET_ROOT, "positive")
     if os.path.exists(pos_dir):
-        for speaker_folder in os.listdir(pos_dir):
+        for speaker_folder in sorted(os.listdir(pos_dir)):
             speaker_path = os.path.join(pos_dir, speaker_folder)
             if os.path.isdir(speaker_path):
-                for f in os.listdir(speaker_path):
-                    if f.endswith('.wav'):
+                for f in sorted(os.listdir(speaker_path)):
+                    if f.lower().endswith('.wav'):
                         human_samples.append({
                             'path': os.path.join(speaker_path, f),
                             'label': 1.0,
@@ -216,8 +220,8 @@ def load_human_dataset():
         for cat in ['similar_phrases', 'normal_speech', 'background_noise']:
             cat_path = os.path.join(neg_dir, cat)
             if os.path.isdir(cat_path):
-                for f in os.listdir(cat_path):
-                    if f.endswith('.wav'):
+                for f in sorted(os.listdir(cat_path)):
+                    if f.lower().endswith('.wav'):
                         human_samples.append({
                             'path': os.path.join(cat_path, f),
                             'label': 0.0,
@@ -310,54 +314,58 @@ def generate_synthetic_dataset(voices):
 def split_dataset(all_samples, seed=42):
     random.seed(seed)
     
-    # 1. Identify all positive speakers
-    pos_speakers = list(set([s['speaker'] for s in all_samples if s['label'] == 1.0]))
+    # 1. Identify all distinct positive human speakers
+    pos_speakers = sorted(list(set([s['speaker'] for s in all_samples if s['label'] == 1.0 and s.get('type') == 'human'])))
     random.shuffle(pos_speakers)
     
-    # Determine speaker split
-    if len(pos_speakers) >= 3:
-        # Strict speaker-independent split: assign speakers to Train, Val, Test
-        # Ensure at least 1 speaker goes to Val and 1 to Test
-        num_val = max(1, int(len(pos_speakers) * 0.15))
-        num_test = max(1, int(len(pos_speakers) * 0.15))
-        num_train = len(pos_speakers) - num_val - num_test
+    # Strict speaker-independent split requires at least 3 distinct human speakers
+    if len(pos_speakers) < 3:
+        raise ValueError(
+            f"Speaker-independent split requires at least 3 distinct positive human speakers, "
+            f"but found {len(pos_speakers)}. Halting to prevent speaker leakage across train/validation/test splits."
+        )
         
-        train_speakers = set(pos_speakers[:num_train])
-        val_speakers = set(pos_speakers[num_train:num_train + num_val])
-        test_speakers = set(pos_speakers[num_train + num_val:])
-        print(f"Speaker-independent split: Train={train_speakers}, Val={val_speakers}, Test={test_speakers}")
-    else:
-        # Degraded mode: Not enough unique speakers to isolate them. Split samples within speakers.
-        print(f"Warning: Only {len(pos_speakers)} unique positive speakers found. Cannot perform speaker-independent split across all sets.")
-        train_speakers = set(pos_speakers)
-        val_speakers = set(pos_speakers)
-        test_speakers = set(pos_speakers)
+    # Strict speaker-independent split: assign speakers to Train, Val, Test with zero overlap
+    # Ensure at least 1 speaker goes to Val and 1 to Test
+    num_val = max(1, int(len(pos_speakers) * 0.15))
+    num_test = max(1, int(len(pos_speakers) * 0.15))
+    num_train = len(pos_speakers) - num_val - num_test
+    if num_train < 1:
+        num_train = 1
+        num_val = 1
+        num_test = len(pos_speakers) - num_train - num_val
         
+    train_speakers = set(pos_speakers[:num_train])
+    val_speakers = set(pos_speakers[num_train:num_train + num_val])
+    test_speakers = set(pos_speakers[num_train + num_val:])
+    
+    # Assert zero leakage
+    assert train_speakers.isdisjoint(val_speakers), "Speaker leakage detected between Train and Val sets!"
+    assert train_speakers.isdisjoint(test_speakers), "Speaker leakage detected between Train and Test sets!"
+    assert val_speakers.isdisjoint(test_speakers), "Speaker leakage detected between Val and Test sets!"
+    
+    print(f"Strict Speaker-Independent Split (Zero Leakage):")
+    print(f"  Train Speakers ({len(train_speakers)}) : {sorted(list(train_speakers))}")
+    print(f"  Val Speakers   ({len(val_speakers)}) : {sorted(list(val_speakers))}")
+    print(f"  Test Speakers  ({len(test_speakers)}) : {sorted(list(test_speakers))}")
+    
     train_files, val_files, test_files = [], [], []
     
     for s in all_samples:
         is_independent = s['speaker'] in ['independent_noise', 'independent_speech', 'unknown'] or s['speaker'].startswith('independent_')
         
-        if not is_independent:
-            # Route by speaker
-            if len(pos_speakers) >= 3:
-                if s['speaker'] in train_speakers:
-                    train_files.append(s)
-                elif s['speaker'] in val_speakers:
-                    val_files.append(s)
-                elif s['speaker'] in test_speakers:
-                    test_files.append(s)
+        if not is_independent and s.get('type') == 'human':
+            # Strictly route by human speaker - zero speaker leakage
+            if s['speaker'] in train_speakers:
+                train_files.append(s)
+            elif s['speaker'] in val_speakers:
+                val_files.append(s)
+            elif s['speaker'] in test_speakers:
+                test_files.append(s)
             else:
-                # Split samples of these speakers randomly (70% Train, 15% Val, 15% Test)
-                r = random.random()
-                if r < 0.70:
-                    train_files.append(s)
-                elif r < 0.85:
-                    val_files.append(s)
-                else:
-                    test_files.append(s)
+                train_files.append(s)
         else:
-            # Independent samples (like room noises/general text files) split randomly
+            # Independent audio (environmental noise, room tone, general speech, or synthetic augmentations)
             r = random.random()
             if r < 0.70:
                 train_files.append(s)
@@ -467,25 +475,33 @@ def evaluate_model(model, data_loader, threshold=0.5):
 def main():
     print("=== WAKE WORD TRAINING SYSTEM ===")
     
-    # Step 1: Scan for real human recordings
-    print("\nScanning for real human recordings...")
+    # Step 1: Validate dataset structure, file integrity, and readiness
+    print("\nValidating dataset before training...")
+    report = validate_dataset(DATASET_ROOT, verbose=False)
+    print_summary(report)
+    
+    if not report["structure_valid"]:
+        print("[ERROR] Dataset structure validation failed. Please resolve directory issues before training.")
+        return
+        
+    if len(report["corrupt_files"]) > 0:
+        print(f"[ERROR] Found {len(report['corrupt_files'])} corrupt audio files. Training cannot proceed.")
+        return
+
+    if not report["ready_for_training"]:
+        print("=" * 80)
+        print("[SAFETY NOTICE] TRAINING HALTED: DATASET NOT READY")
+        print(f"Status: {report['readiness_reason']}")
+        print("\nTraining requires verified real human recordings across multiple speakers")
+        print("and all negative categories to ensure leak-free speaker-independent evaluation.")
+        print("Existing production model 'hey_louie.onnx' remains completely unchanged.")
+        print("=" * 80 + "\n")
+        return
+        
+    # Step 2: Load real human recordings
+    print("\nLoading real human recordings...")
     human_samples = load_human_dataset()
     print(f"Found {len(human_samples)} real human recordings.")
-    
-    # Exit if no real recordings are available yet
-    if len(human_samples) == 0:
-        print("\n" + "="*80)
-        print("[NOTICE] REAL HUMAN RECORDINGS REQUIRED")
-        print("No WAV files found in 'dataset/positive/speaker_*' or 'dataset/negative/*'.")
-        print("The dataset structure and loader are successfully verified and ready.")
-        print("\nPlease record 'Hey Louie' samples from several speakers and place them into:")
-        print("  - dataset/positive/speaker_01/")
-        print("  - dataset/positive/speaker_02/")
-        print("  - dataset/positive/speaker_03/")
-        print("  - dataset/positive/speaker_04/")
-        print("\nTraining cannot proceed without real human recordings.")
-        print("="*80 + "\n")
-        return
         
     # Enumerate SAPI5 Voices to combine synthetic samples
     speaker_engine = comtypes.client.CreateObject("SAPI.SpVoice")

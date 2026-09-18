@@ -14,6 +14,36 @@ export class MicrophoneManager {
     this.sourceNode = null;
     this.workletNode = null;
     this.isRecording = false;
+    this.actualSampleRate = null;
+  }
+
+  /**
+   * Check whether microphone audio pipeline is initialized.
+   */
+  get isInitialized() {
+    return Boolean(this.audioContext && this.workletNode);
+  }
+
+  /**
+   * Check whether microphone is actively streaming.
+   */
+  get isActive() {
+    return this.isRecording;
+  }
+
+  /**
+   * Get the actual active AudioContext sample rate in Hz.
+   * Returns null if uninitialized, or the real hardware/driver sampleRate.
+   */
+  get sampleRate() {
+    return this.audioContext ? this.audioContext.sampleRate : this.actualSampleRate;
+  }
+
+  /**
+   * Check whether the AudioContext is running at exactly 16000 Hz.
+   */
+  get isStandardSampleRate() {
+    return Boolean(this.audioContext && this.audioContext.sampleRate === AUDIO_CONFIG.SAMPLE_RATE);
   }
 
   /**
@@ -21,6 +51,9 @@ export class MicrophoneManager {
    * @returns {Promise<boolean>} Resolves to true if initialization succeeded.
    */
   async initialize() {
+    if (this.isInitialized) {
+      return true;
+    }
     logger.info('Microphone', 'Initializing microphone capture...');
     try {
       // 1. Request microphone access permission from the browser
@@ -43,6 +76,20 @@ export class MicrophoneManager {
         latencyHint: 'interactive'
       });
 
+      // Explicitly inspect and verify the actual AudioContext sample rate
+      this.actualSampleRate = this.audioContext.sampleRate;
+      if (this.actualSampleRate === AUDIO_CONFIG.SAMPLE_RATE) {
+        logger.info(
+          'Microphone',
+          `AudioContext sample rate verified: ${this.actualSampleRate} Hz (matches standard 16 kHz).`
+        );
+      } else {
+        logger.warn(
+          'Microphone',
+          `AudioContext sample rate mismatch: requested ${AUDIO_CONFIG.SAMPLE_RATE} Hz, but running at ${this.actualSampleRate} Hz. Downstream dataset recording will resample to 16 kHz.`
+        );
+      }
+
       // 3. Load and register the custom AudioWorkletProcessor
       await this.audioContext.audioWorklet.addModule(new URL('./audio-worklet.js', import.meta.url).href);
       
@@ -54,8 +101,8 @@ export class MicrophoneManager {
       this.workletNode.port.onmessage = (event) => this.handleAudioFrame(event.data);
       this.sourceNode.connect(this.workletNode);
 
-      eventBus.emit(EVENTS.MIC_INITIALIZED);
-      logger.info('Microphone', 'Audio pipeline initialized, ready to start.');
+      eventBus.emit(EVENTS.MIC_INITIALIZED, { sampleRate: this.actualSampleRate });
+      logger.info('Microphone', `Audio pipeline initialized at ${this.actualSampleRate} Hz, ready to start.`);
       return true;
     } catch (error) {
       logger.error('Microphone', `Failed to initialize microphone: ${error.message}`);
@@ -140,5 +187,9 @@ export class MicrophoneManager {
     this.workletNode = null;
     this.audioContext = null;
     this.mediaStream = null;
+    this.actualSampleRate = null;
   }
 }
+
+// Shared singleton instance for unified microphone access across modules
+export const microphoneManager = new MicrophoneManager();

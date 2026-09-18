@@ -2,7 +2,7 @@ import './style.css';
 import { eventBus } from './events/event-bus.js';
 import { EVENTS } from './utils/constants.js';
 import { logger } from './utils/logger.js';
-import { MicrophoneManager } from './audio/microphone.js';
+import { microphoneManager } from './audio/microphone.js';
 import { RNNoiseWrapper } from './dsp/rnnoise.js';
 import { WebRtcVadWrapper } from './vad/webrtc-vad.js';
 import { OpenWakeWordWrapper } from './wakeword/openwakeword.js';
@@ -11,12 +11,21 @@ import { SpeechEmbedding } from './wakeword/speech-embedding.js';
 import { Dashboard } from './ui/dashboard.js';
 
 // Instantiate module references
-let micManager = null;
+let micManager = microphoneManager;
 let rnnoise = null;
 let vad = null;
 let wakeword = null;
 let melspec = null;
 let speechEmbedding = null;
+
+// Track dataset recording state to bypass live inference while preserving raw mic streaming
+let isDatasetRecording = false;
+eventBus.on(EVENTS.DATASET_RECORDING_STARTED, () => {
+  isDatasetRecording = true;
+});
+eventBus.on(EVENTS.DATASET_RECORDING_STOPPED, () => {
+  isDatasetRecording = false;
+});
 
 // Initialize GUI Dashboard
 const appContainer = document.getElementById('app');
@@ -29,8 +38,8 @@ logger.info('System', 'Application booster completed. Ready to initialize audio 
 window.addEventListener('pipeline:init', async () => {
   logger.info('System', 'Starting pipeline initialization...');
 
-  // Initialize Microphone Manager
-  micManager = new MicrophoneManager();
+  // Use shared Microphone Manager
+  micManager = microphoneManager;
   
   // Initialize DSP RNNoise module
   rnnoise = new RNNoiseWrapper();
@@ -63,6 +72,12 @@ window.addEventListener('pipeline:init', async () => {
     // Bind the real-time processing stream pipeline
     // This hooks: Mic raw frame -> RNNoise Denoising -> WebRTC VAD -> MelSpectrogram -> OpenWakeWord inference
     eventBus.on(EVENTS.MIC_STREAM_DATA, (rawFrame) => {
+      // Audio Routing Rule: When dataset recording is active, bypass live inference processing
+      // chain completely, preserving raw mic frame flow to Dataset Recorder without ONNX overhead.
+      if (isDatasetRecording) {
+        return;
+      }
+
       const t0 = performance.now();
       
       // 1. DSP (Denoise)

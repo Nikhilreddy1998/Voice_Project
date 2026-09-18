@@ -52,6 +52,24 @@ export const EVENTS = {
   // Performance/Telemetry Events
   METRICS_UPDATE: 'metrics:update', // Emits { latencyMs: number, fps: number, cpuEstimation: number }
   LOG: 'log', // Emits { timestamp: string, level: string, message: string }
+
+  // Dataset Recording Events
+  DATASET_RECORDING_STARTED: 'dataset:recording-started',
+  DATASET_RECORDING_STOPPED: 'dataset:recording-stopped',
+  DATASET_RECORDING_READY: 'dataset:recording-ready',
+  DATASET_RECORDING_SAVED: 'dataset:recording-saved',
+  DATASET_RECORDING_DISCARDED: 'dataset:recording-discarded',
+  DATASET_RECORDING_ERROR: 'dataset:recording-error',
+};
+
+export const DATASET_CONFIG = {
+  SAMPLE_RATE: 16000,
+  CHANNELS: 1,
+  BIT_DEPTH: 16,
+  MIN_DURATION_SEC: 2.0,
+  MAX_DURATION_SEC: 4.0,
+  MIN_RMS_THRESHOLD: 0.003,
+  MAX_DC_OFFSET_WARN: 0.08,
 };
 
 export const LOG_LEVELS = {

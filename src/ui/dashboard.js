@@ -1,6 +1,7 @@
 import { eventBus } from '../events/event-bus.js';
 import { EVENTS } from '../utils/constants.js';
 import { VadMetricsComponent } from './vad-metrics.js';
+import { DatasetRecorderComponent } from './dataset-recorder.js';
 
 export class Dashboard {
   /**
@@ -12,6 +13,7 @@ export class Dashboard {
     this.elements = {};
     this.logsLimit = 100;
     this.logsList = [];
+    this.datasetRecorder = null;
     
     // Bind callback contexts
     this._handleLog = this._handleLog.bind(this);
@@ -34,13 +36,23 @@ export class Dashboard {
             <span class="icon">🎙️</span>
             <h1>Wake Word Detection Hub</h1>
           </div>
-          <div class="actions">
+          <nav class="nav-tabs" aria-label="Dashboard View Navigation">
+            <button id="tab-btn-live" class="nav-tab active" type="button">
+              <span class="tab-icon">🎯</span> Live Detection
+            </button>
+            <button id="tab-btn-dataset" class="nav-tab" type="button">
+              <span class="tab-icon">🎙️</span> Dataset Collector
+            </button>
+          </nav>
+          <div class="actions" id="header-live-actions">
             <button id="btn-init" class="btn primary">Initialize Pipeline</button>
             <button id="btn-toggle" class="btn success" disabled>Start Listening</button>
           </div>
         </header>
 
-        <main class="dashboard-content">
+        <!-- Live Detection View Panel -->
+        <div id="view-live" class="dashboard-view-panel active">
+          <main class="dashboard-content">
           <!-- Status Grid -->
           <section class="card status-card">
             <h2>Pipeline Modules</h2>
@@ -365,83 +377,99 @@ export class Dashboard {
           </section>
         </main>
       </div>
-    `;
 
-    // Cache elements
-    this.elements = {
-      btnInit: document.getElementById('btn-init'),
-      btnToggle: document.getElementById('btn-toggle'),
-      btnClearLogs: document.getElementById('btn-clear-logs'),
-      micBadge: document.getElementById('status-mic-badge'),
-      dspBadge: document.getElementById('status-dsp-badge'),
-      vadBadge: document.getElementById('status-vad-badge'),
-      melspecBadge: document.getElementById('status-melspec-badge'),
-      wwBadge: document.getElementById('status-ww-badge'),
-      metricLatency: document.getElementById('metric-latency'),
-      metricFps: document.getElementById('metric-fps'),
-      metricCpu: document.getElementById('metric-cpu'),
-      logsList: document.getElementById('console-logs-list'),
-      canvas: document.getElementById('audio-visualizer'),
-      timingMic: document.getElementById('timing-mic'),
-      timingDsp: document.getElementById('timing-dsp'),
-      timingVad: document.getElementById('timing-vad'),
-      timingMelspec: document.getElementById('timing-melspec'),
-      timingWw: document.getElementById('timing-ww'),
-      timingTotal: document.getElementById('timing-total'),
-      wwStatusBadge: document.getElementById('ww-status-badge'),
-      wwCfgPhrase: document.getElementById('ww-cfg-phrase'),
-      wwLoadedModel: document.getElementById('ww-loaded-model'),
-      wwModeBadge: document.getElementById('ww-mode-badge'),
-      wwProgressBarContainer: document.getElementById('ww-progress-bar-container'),
-      wwProgressPct: document.getElementById('ww-progress-pct'),
-      wwProgressFill: document.getElementById('ww-progress-fill'),
-      wwInferenceStatus: document.getElementById('ww-inference-status'),
-      wwInferenceReason: document.getElementById('ww-inference-reason'),
-      wwMetricLastDetect: document.getElementById('ww-metric-last-detect'),
-      wwMetricDetections: document.getElementById('ww-metric-detections'),
-      wwCooldownBadge: document.getElementById('ww-cooldown-badge'),
-      wwMetricDropped: document.getElementById('ww-metric-dropped'),
-      wwMetricConfidence: document.getElementById('ww-metric-confidence'),
-      wwMetricThreshold: document.getElementById('ww-metric-threshold'),
-      wwMetricInferences: document.getElementById('ww-metric-inferences'),
-      
-      // Mel Spectrogram DOM element caches
-      melspecStatusBadge: document.getElementById('melspec-status-badge'),
-      melspecLoadedModel: document.getElementById('melspec-loaded-model'),
-      melspecBufferSize: document.getElementById('melspec-buffer-size'),
-      melspecProgressBarContainer: document.getElementById('melspec-progress-bar-container'),
-      melspecProgressPct: document.getElementById('melspec-progress-pct'),
-      melspecProgressFill: document.getElementById('melspec-progress-fill'),
-      melspecMetricFrames: document.getElementById('melspec-metric-frames'),
-      melspecMetricAvgLatency: document.getElementById('melspec-metric-avg-latency'),
-      melspecMetricMaxLatency: document.getElementById('melspec-metric-max-latency'),
-      melspecMetricDropped: document.getElementById('melspec-metric-dropped'),
-      melspecMetricLastTime: document.getElementById('melspec-metric-last-time'),
+      <!-- Dataset Collector View Panel -->
+      <div id="view-dataset" class="dashboard-view-panel" style="display: none;"></div>
+    </div>
+  `;
 
-      // Speech Embedding badge
-      embeddingBadge: document.getElementById('status-embedding-badge'),
-      timingEmbedding: document.getElementById('timing-embedding'),
+  // Cache elements
+  this.elements = {
+    tabBtnLive: document.getElementById('tab-btn-live'),
+    tabBtnDataset: document.getElementById('tab-btn-dataset'),
+    viewLive: document.getElementById('view-live'),
+    viewDataset: document.getElementById('view-dataset'),
+    headerLiveActions: document.getElementById('header-live-actions'),
+    btnInit: document.getElementById('btn-init'),
+    btnToggle: document.getElementById('btn-toggle'),
+    btnClearLogs: document.getElementById('btn-clear-logs'),
+    micBadge: document.getElementById('status-mic-badge'),
+    dspBadge: document.getElementById('status-dsp-badge'),
+    vadBadge: document.getElementById('status-vad-badge'),
+    melspecBadge: document.getElementById('status-melspec-badge'),
+    wwBadge: document.getElementById('status-ww-badge'),
+    metricLatency: document.getElementById('metric-latency'),
+    metricFps: document.getElementById('metric-fps'),
+    metricCpu: document.getElementById('metric-cpu'),
+    logsList: document.getElementById('console-logs-list'),
+    canvas: document.getElementById('audio-visualizer'),
+    timingMic: document.getElementById('timing-mic'),
+    timingDsp: document.getElementById('timing-dsp'),
+    timingVad: document.getElementById('timing-vad'),
+    timingMelspec: document.getElementById('timing-melspec'),
+    timingWw: document.getElementById('timing-ww'),
+    timingTotal: document.getElementById('timing-total'),
+    wwStatusBadge: document.getElementById('ww-status-badge'),
+    wwCfgPhrase: document.getElementById('ww-cfg-phrase'),
+    wwLoadedModel: document.getElementById('ww-loaded-model'),
+    wwModeBadge: document.getElementById('ww-mode-badge'),
+    wwProgressBarContainer: document.getElementById('ww-progress-bar-container'),
+    wwProgressPct: document.getElementById('ww-progress-pct'),
+    wwProgressFill: document.getElementById('ww-progress-fill'),
+    wwInferenceStatus: document.getElementById('ww-inference-status'),
+    wwInferenceReason: document.getElementById('ww-inference-reason'),
+    wwMetricLastDetect: document.getElementById('ww-metric-last-detect'),
+    wwMetricDetections: document.getElementById('ww-metric-detections'),
+    wwCooldownBadge: document.getElementById('ww-cooldown-badge'),
+    wwMetricDropped: document.getElementById('ww-metric-dropped'),
+    wwMetricConfidence: document.getElementById('ww-metric-confidence'),
+    wwMetricThreshold: document.getElementById('ww-metric-threshold'),
+    wwMetricInferences: document.getElementById('ww-metric-inferences'),
+    
+    // Mel Spectrogram DOM element caches
+    melspecStatusBadge: document.getElementById('melspec-status-badge'),
+    melspecLoadedModel: document.getElementById('melspec-loaded-model'),
+    melspecBufferSize: document.getElementById('melspec-buffer-size'),
+    melspecProgressBarContainer: document.getElementById('melspec-progress-bar-container'),
+    melspecProgressPct: document.getElementById('melspec-progress-pct'),
+    melspecProgressFill: document.getElementById('melspec-progress-fill'),
+    melspecMetricFrames: document.getElementById('melspec-metric-frames'),
+    melspecMetricAvgLatency: document.getElementById('melspec-metric-avg-latency'),
+    melspecMetricMaxLatency: document.getElementById('melspec-metric-max-latency'),
+    melspecMetricDropped: document.getElementById('melspec-metric-dropped'),
+    melspecMetricLastTime: document.getElementById('melspec-metric-last-time'),
 
-      // Speech Embedding DOM element caches
-      embeddingStatusBadge: document.getElementById('embedding-status-badge'),
-      embeddingLoadedModel: document.getElementById('embedding-loaded-model'),
-      embeddingBufferSize: document.getElementById('embedding-buffer-size'),
-      embeddingProgressBarContainer: document.getElementById('embedding-progress-bar-container'),
-      embeddingProgressPct: document.getElementById('embedding-progress-pct'),
-      embeddingProgressFill: document.getElementById('embedding-progress-fill'),
-      embeddingMetricInferences: document.getElementById('embedding-metric-inferences'),
-      embeddingMetricAvgLatency: document.getElementById('embedding-metric-avg-latency'),
-      embeddingMetricMaxLatency: document.getElementById('embedding-metric-max-latency'),
-      embeddingMetricDropped: document.getElementById('embedding-metric-dropped'),
-      embeddingMetricLastTime: document.getElementById('embedding-metric-last-time')
-    };
+    // Speech Embedding badge
+    embeddingBadge: document.getElementById('status-embedding-badge'),
+    timingEmbedding: document.getElementById('timing-embedding'),
 
-    // Instantiate and render VAD metrics sub-component
-    const vadMetricsContainer = document.getElementById('vad-metrics-container');
-    if (vadMetricsContainer) {
-      this.vadMetrics = new VadMetricsComponent(vadMetricsContainer);
-      this.vadMetrics.render();
-    }
+    // Speech Embedding DOM element caches
+    embeddingStatusBadge: document.getElementById('embedding-status-badge'),
+    embeddingLoadedModel: document.getElementById('embedding-loaded-model'),
+    embeddingBufferSize: document.getElementById('embedding-buffer-size'),
+    embeddingProgressBarContainer: document.getElementById('embedding-progress-bar-container'),
+    embeddingProgressPct: document.getElementById('embedding-progress-pct'),
+    embeddingProgressFill: document.getElementById('embedding-progress-fill'),
+    embeddingMetricInferences: document.getElementById('embedding-metric-inferences'),
+    embeddingMetricAvgLatency: document.getElementById('embedding-metric-avg-latency'),
+    embeddingMetricMaxLatency: document.getElementById('embedding-metric-max-latency'),
+    embeddingMetricDropped: document.getElementById('embedding-metric-dropped'),
+    embeddingMetricLastTime: document.getElementById('embedding-metric-last-time')
+  };
+
+  // Instantiate and render VAD metrics sub-component
+  const vadMetricsContainer = document.getElementById('vad-metrics-container');
+  if (vadMetricsContainer) {
+    this.vadMetrics = new VadMetricsComponent(vadMetricsContainer);
+    this.vadMetrics.render();
+  }
+
+  // Instantiate and render Dataset Recorder component
+  const datasetContainer = document.getElementById('view-dataset');
+  if (datasetContainer) {
+    this.datasetRecorder = new DatasetRecorderComponent(datasetContainer);
+    this.datasetRecorder.render();
+  }
 
     this._bindButtonEvents();
     this._subscribeToEvents();
@@ -753,6 +781,25 @@ export class Dashboard {
    * @private
    */
   _bindButtonEvents() {
+    // Top-level Navigation Tabs
+    if (this.elements.tabBtnLive && this.elements.tabBtnDataset) {
+      this.elements.tabBtnLive.addEventListener('click', () => {
+        this.elements.tabBtnLive.classList.add('active');
+        this.elements.tabBtnDataset.classList.remove('active');
+        if (this.elements.viewLive) this.elements.viewLive.style.display = 'block';
+        if (this.elements.viewDataset) this.elements.viewDataset.style.display = 'none';
+        if (this.elements.headerLiveActions) this.elements.headerLiveActions.style.display = 'flex';
+      });
+
+      this.elements.tabBtnDataset.addEventListener('click', () => {
+        this.elements.tabBtnDataset.classList.add('active');
+        this.elements.tabBtnLive.classList.remove('active');
+        if (this.elements.viewLive) this.elements.viewLive.style.display = 'none';
+        if (this.elements.viewDataset) this.elements.viewDataset.style.display = 'block';
+        if (this.elements.headerLiveActions) this.elements.headerLiveActions.style.display = 'none';
+      });
+    }
+
     this.elements.btnInit.addEventListener('click', () => {
       this.elements.btnInit.disabled = true;
       this.elements.btnInit.textContent = 'Initializing...';
